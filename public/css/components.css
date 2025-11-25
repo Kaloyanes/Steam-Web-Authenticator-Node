@@ -1,0 +1,134 @@
+button {
+  background: var(--color-primary);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  transition: all 0.2s;
+  font-weight: 500;
+  font-family: inherit;
+}
+
+button:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+  transform: translateY(-1px);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.secondary {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
+}
+
+button.secondary:hover:not(:disabled) {
+  background: var(--border-primary);
+}
+
+button.danger {
+  background: var(--color-danger);
+}
+
+button.danger:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+button.success {
+  background: var(--color-success);
+  color: #111827;
+}
+
+input,
+textarea {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-light);
+  color: var(--text-primary);
+  padding: 8px;
+  border-radius: 4px;
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 10px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  transition: border-color 0.2s;
+}
+
+input:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-tertiary);
+}
+
+.status-message {
+  margin-top: 10px;
+  font-size: 0.9rem;
+  padding: 10px;
+  border-radius: 4px;
+}
+
+.status-info {
+  color: #60a5fa;
+  background: rgba(96, 165, 250, 0.1);
+  border: 1px solid rgba(96, 165, 250, 0.2);
+}
+
+.status-success {
+  color: var(--color-success);
+  background: rgba(74, 222, 128, 0.1);
+  border: 1px solid rgba(74, 222, 128, 0.2);
+}
+
+.status-error {
+  color: var(--color-error);
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid rgba(248, 113, 113, 0.2);
+}
+
+.status-warning {
+  color: var(--color-warning);
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.badge-primary {
+  background: var(--color-primary);
+  color: white;
+}
+
+.badge-success {
+  background: rgba(74, 222, 128, 0.2);
+  color: var(--color-success);
+  border: 1px solid rgba(74, 222, 128, 0.3);
+}
+
+.badge-danger {
+  background: rgba(248, 113, 113, 0.2);
+  color: var(--color-error);
+  border: 1px solid rgba(248, 113, 113, 0.3);
+}

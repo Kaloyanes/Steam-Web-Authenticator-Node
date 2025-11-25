@@ -1,0 +1,113 @@
+.confirmations-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.conf-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.conf-header-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.conf-count {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.conf-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.conf-item {
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.conf-item:hover {
+  background: var(--bg-secondary);
+  border-color: var(--color-primary);
+}
+
+.conf-item-checkbox {
+  margin-top: 4px;
+  cursor: pointer;
+}
+
+.conf-item-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.conf-item-title {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.conf-item-summary {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.conf-item-time {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+
+.conf-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-primary);
+}
+
+.conf-actions button {
+  flex: 1;
+}
+
+.login-reminder {
+  background: var(--bg-accent);
+  border-left: 3px solid var(--color-warning);
+  padding: 12px;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.login-reminder-input {
+  margin: 10px 0;
+}
+
+.login-reminder input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.login-reminder button {
+  width: 100%;
+  margin-top: 8px;
+}
