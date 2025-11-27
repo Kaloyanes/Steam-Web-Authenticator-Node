@@ -14,8 +14,8 @@ let isAligned = false;
 const STEAM_HEADERS = {
   Accept: 'application/json, text/javascript; q=0.01',
   'User-Agent':
-    'Mozilla/5.0 (Linux; Android 6.0; Nexus 6P Build/MDA89D) AppleWebKit/537. 36 (KHTML, like Gecko) Chrome/88.0.4324.181 Mobile Safari/537.36',
-  'X-Requested-With': 'com.valvesoftware. android.steam.community',
+    'Mozilla/5.0 (Linux; Android 6.0; Nexus 6P Build/MDA89D) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.181 Mobile Safari/537.36',
+  'X-Requested-With': 'com.valvesoftware.android.steam.community',
   Referer: 'https://steamcommunity.com/mobileconf/conf',
   Host: 'steamcommunity.com'
 };
@@ -33,7 +33,7 @@ async function alignTime() {
         validateStatus: () => true
       }
     );
-    const st = parseInt(res.data?. response?.server_time, 10);
+    const st = parseInt(res.data?.response?.server_time, 10);
     if (! Number.isNaN(st)) {
       const lt = Math.floor(Date.now() / 1000);
       timeOffset = st - lt;
@@ -69,7 +69,7 @@ function generateConfirmationQueryParams(account, tag) {
   const time = getSteamTime();
   const key = generateConfirmationKey(account.identity_secret, time, tag);
   const params = new URLSearchParams();
-  params. set('p', account.device_id);
+  params.set('p', account.device_id);
   params.set('a', account.steamid);
   params.set('k', key);
   params.set('t', time);
@@ -80,7 +80,7 @@ function generateConfirmationQueryParams(account, tag) {
 
 function getSessionCookieHeader(account) {
   // UPDATED: Check session validity first
-  const validationResult = isSessionValid(account. id);
+  const validationResult = isSessionValid(account.id);
   
   if (!validationResult.valid) {
     console.error(`[Confirmations] Session validation failed: ${validationResult.reason}`);
@@ -104,10 +104,10 @@ async function fetchConfirmations(account) {
   try {
     const cookie = getSessionCookieHeader(account);
     const params = generateConfirmationQueryParams(account, 'conf');
-    const url = `https://steamcommunity.com/mobileconf/getlist? ${params. toString()}`;
+    const url = `https://steamcommunity.com/mobileconf/getlist? ${params.toString()}`;
 
     const res = await axios.get(url, {
-      headers: { ... STEAM_HEADERS, Cookie: cookie },
+      headers: { ...STEAM_HEADERS, Cookie: cookie },
       httpsAgent: getAgent(),
       validateStatus: () => true
     });
@@ -158,7 +158,7 @@ async function actOnConfirmations(account, op, confirmations) {
 
     const url = `https://steamcommunity.com/mobileconf/ajaxop?${params.toString()}`;
 
-    const res = await axios.post(url, formData. toString(), {
+    const res = await axios.post(url, formData.toString(), {
       headers: {
         ...STEAM_HEADERS,
         Cookie: cookie,
@@ -185,7 +185,7 @@ async function actOnConfirmations(account, op, confirmations) {
 
     return data;
   } catch (err) {
-    if (err. message === 'LOGIN_REQUIRED') {
+    if (err.message === 'LOGIN_REQUIRED') {
       throw err;
     }
     console.error('[ConfAct] Error:', err.message);

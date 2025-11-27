@@ -70,7 +70,7 @@ async function getDevicesFromSettings(account) {
       const lastUsed = formatLastUsed(dev.last_seen?.time || dev.time_updated);
 
       return {
-        id: dev.token_id || generateDeviceId(name + idx),
+        id: String(dev.token_id), // Use token_id directly - this is what Steam API expects
         name,
         location,
         lastUsed,
@@ -176,6 +176,10 @@ function generateDeviceId(name) {
 
 async function removeDevice(account, deviceId) {
   try {
+    if (!deviceId) {
+      throw new Error('Device ID is required');
+    }
+
     const saved = getSessionCookiesForAccount(account.id);
     if (!saved?.sessionid || !saved?.steamLoginSecure) {
       throw new Error('LOGIN_REQUIRED');
@@ -184,8 +188,10 @@ async function removeDevice(account, deviceId) {
     const cookieStr = `sessionid=${saved.sessionid}; steamLoginSecure=${saved.steamLoginSecure}`;
 
     const params = new URLSearchParams();
-    params.set('token_id', deviceId);
+    params.set('token_id', String(deviceId));
     params.set('sessionid', saved.sessionid);
+
+    console.log(`[Device] Removing device ${deviceId}...`);
 
     const res = await axios.post(
       'https://store.steampowered.com/account/ajaxrevokedevice',
@@ -204,19 +210,26 @@ async function removeDevice(account, deviceId) {
       }
     );
 
+    console.log(`[Device] Remove response status: ${res.status}`);
+    console.log(`[Device] Remove response data:`, res.data);
+
     updateSessionLastUsed(account.id);
 
     if (res.status === 401 || res.status === 403) {
       throw new Error('LOGIN_REQUIRED');
     }
 
-    if (!res.data.success) {
+    if (res.status !== 200) {
+      throw new Error(`HTTP ${res.status}: ${res.data?.message || 'Failed to remove device'}`);
+    }
+
+    if (res.data && typeof res.data === 'object' && res.data.success === false) {
       throw new Error(res.data.message || 'Failed to remove device');
     }
 
     return { success: true, message: 'Device removed successfully' };
   } catch (err) {
-    console.error('[Device] Error:', err.message);
+    console.error('[Device] Error:', err.message, err.stack);
     throw err;
   }
 }
@@ -239,10 +252,10 @@ async function removeAllDevices(account) {
       success: results.filter(r => r.success).length === results.length,
       results,
       removed: results.filter(r => r.success).length,
-      failed: results.filter(r => !r.success).length
+      failed: results.filter(r => ! r.success).length
     };
   } catch (err) {
-    console.error('[Device] Error:', err.message);
+    console.error('[Device] Error:', err.message, err.stack);
     throw err;
   }
 }
@@ -289,11 +302,11 @@ function getSecurityStatus(account) {
     return {
       hasSession: true,
       sessionExpired: false,
-      authenticatorEnabled: !!(maFile.shared_secret),
-      phoneNumber: !!(maFile.phone_number || maFile.phone || maFile.phone_verified || maFile.fully_enrolled),
+      authenticatorEnabled: ! !(maFile.shared_secret),
+      phoneNumber: ! !(maFile.phone_number || maFile.phone || maFile.phone_verified || maFile.fully_enrolled),
       phoneNumberValue: maFile.phone_number || maFile.phone || null,
       lastLogin: saved.lastUsed || null,
-      revocationCodeAvailable: !!(maFile.revocation_code),
+      revocationCodeAvailable: ! !(maFile.revocation_code),
       tradingEnabled: !!(maFile.fully_enrolled)
     };
   } catch (err) {

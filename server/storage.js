@@ -4,12 +4,17 @@ const crypto = require('crypto');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const MANIFEST_FILE = path.join(DATA_DIR, 'manifest.json');
-const SESSIONS_FILE = path. join(DATA_DIR, 'sessions.json');
+const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 
-const SESSION_EXPIRY_MS = 24 * 60 * 60 * 1000;
+// Session expiry time: 30 days (Steam typically allows sessions to last this long with activity)
+// Steam sessions can last indefinitely if actively used, but we set a max age for security
+const SESSION_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+// Idle timeout: If session hasn't been used in 7 days, consider it stale
+const SESSION_IDLE_TIMEOUT_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 function ensureDataDir() {
-  if (!fs. existsSync(DATA_DIR)) {
+  if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
 }
@@ -34,7 +39,7 @@ function parseMaFileSafe(input) {
 
     return JSON.parse(safeString);
   } catch (e) {
-    console.error('Safe Parse Failed:', e. message);
+    console.error('Safe Parse Failed:', e.message);
     return JSON.parse(input);
   }
 }
@@ -48,7 +53,7 @@ function loadManifest() {
   try {
     const raw = fs.readFileSync(MANIFEST_FILE, 'utf8');
     const manifest = parseMaFileSafe(raw) || {};
-    if (!Array.isArray(manifest.entries)) {
+    if (! Array.isArray(manifest.entries)) {
       manifest.entries = [];
     }
     return manifest;
@@ -65,7 +70,7 @@ function saveManifest(manifest) {
 function getManifestSettings() {
   const manifest = loadManifest();
   return {
-    entries: manifest.entries. length,
+    entries: manifest.entries.length,
     hasEncryption: !!manifest.encryption || manifest.entries.some(e => e.encryption_iv || e.encryption_salt)
   };
 }
@@ -100,7 +105,7 @@ function loadAccounts() {
 
     let maFile;
     try {
-      maFile = parseMaFileSafe(fs. readFileSync(fullPath, 'utf8'));
+      maFile = parseMaFileSafe(fs.readFileSync(fullPath, 'utf8'));
     } catch {
       continue;
     }
@@ -139,7 +144,7 @@ function loadSessionStore() {
 
 function saveSessionStore(store) {
   ensureDataDir();
-  fs.writeFileSync(SESSIONS_FILE, JSON. stringify(store, null, 2));
+  fs.writeFileSync(SESSIONS_FILE, JSON.stringify(store, null, 2));
 }
 
 function getSessionCookiesForAccount(accountId) {
@@ -160,11 +165,28 @@ function isSessionExpired(session) {
     return true;
   }
 
-  const createdAt = new Date(session.createdAt). getTime();
+  const createdAt = new Date(session.createdAt).getTime();
   const now = Date.now();
   const age = now - createdAt;
 
-  return age > SESSION_EXPIRY_MS;
+  // Check absolute expiry (30 days from creation)
+  if (age > SESSION_EXPIRY_MS) {
+    console.log(`[Sessions] Session expired by age: ${Math.floor(age / (24 * 60 * 60 * 1000))} days old`);
+    return true;
+  }
+
+  // Check idle timeout (7 days since last use)
+  if (session.lastUsed) {
+    const lastUsed = new Date(session.lastUsed).getTime();
+    const idleTime = now - lastUsed;
+    
+    if (idleTime > SESSION_IDLE_TIMEOUT_MS) {
+      console.log(`[Sessions] Session expired by inactivity: ${Math.floor(idleTime / (24 * 60 * 60 * 1000))} days idle`);
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function isSessionValid(accountId) {
@@ -185,6 +207,31 @@ function isSessionValid(accountId) {
   return { valid: true, session };
 }
 
+function getSessionAge(accountId) {
+  const session = getSessionCookiesForAccount(accountId);
+  
+  if (!session || !session.createdAt) {
+    return null;
+  }
+
+  const createdAt = new Date(session.createdAt).getTime();
+  const now = Date.now();
+  const ageMs = now - createdAt;
+  
+  const days = Math.floor(ageMs / (24 * 60 * 60 * 1000));
+  const hours = Math.floor((ageMs % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+  
+  return {
+    ageMs,
+    ageDays: days,
+    ageHours: hours,
+    ageFormatted: `${days} day${days !== 1 ? 's' : ''}, ${hours} hour${hours !== 1 ? 's' : ''}`,
+    expiresInMs: SESSION_EXPIRY_MS - ageMs,
+    expiresInDays: Math.floor((SESSION_EXPIRY_MS - ageMs) / (24 * 60 * 60 * 1000)),
+    lastUsed: session.lastUsed ?  new Date(session.lastUsed).toISOString() : null
+  };
+}
+
 function setSessionCookiesForAccount(
   accountId,
   sessionid,
@@ -196,22 +243,33 @@ function setSessionCookiesForAccount(
 
   const timestamp = new Date().toISOString();
   
+  // Preserve createdAt if session already exists (for session refresh)
+  const existingSession = store.sessions[accountId];
+  const createdAt = existingSession?.createdAt || timestamp;
+  
   store.sessions[accountId] = {
     sessionid,
     steamLoginSecure,
     oAuthToken,
-    createdAt: timestamp,
-    lastUsed: timestamp
+    createdAt,
+    lastUsed: timestamp,
+    lastRefreshed: timestamp
   };
 
-  console.log(`[Sessions] Saved session for account ${accountId}`);
+  const age = getSessionAge(accountId);
+  if (age) {
+    console.log(`[Sessions] Session for account ${accountId}: ${age.ageFormatted} old, expires in ${age.expiresInDays} days`);
+  } else {
+    console.log(`[Sessions] Created new session for account ${accountId}`);
+  }
+  
   saveSessionStore(store);
 }
 
 function updateSessionLastUsed(accountId) {
   const store = loadSessionStore();
   if (store.sessions && store.sessions[accountId]) {
-    store.sessions[accountId]. lastUsed = new Date().toISOString();
+    store.sessions[accountId].lastUsed = new Date().toISOString();
     saveSessionStore(store);
   }
 }
@@ -250,7 +308,7 @@ function addAccountFromMaFile(input) {
   }
 
   if (!maFile.device_id && (maFile.deviceID || maFile.deviceId)) {
-    maFile.device_id = maFile.deviceID || maFile. deviceId;
+    maFile.device_id = maFile.deviceID || maFile.deviceId;
   }
 
   const filename = `${steamid}.maFile`;
@@ -271,7 +329,7 @@ function addAccountFromMaFile(input) {
       auto_confirm_trades: false,
       auto_confirm_market_transactions: false
     };
-    manifest.entries. push(entry);
+    manifest.entries.push(entry);
   } else {
     if (! Object.prototype.hasOwnProperty.call(entry, 'filename')) {
       entry.filename = filename;
@@ -279,7 +337,7 @@ function addAccountFromMaFile(input) {
     if (!Object.prototype.hasOwnProperty.call(entry, 'encryption_iv')) {
       entry.encryption_iv = null;
     }
-    if (!Object.prototype.hasOwnProperty. call(entry, 'encryption_salt')) {
+    if (!Object.prototype.hasOwnProperty.call(entry, 'encryption_salt')) {
       entry.encryption_salt = null;
     }
     if (!Object.prototype.hasOwnProperty.call(entry, 'auto_confirm_trades')) {
@@ -295,12 +353,12 @@ function addAccountFromMaFile(input) {
     }
 
     delete entry.account_name;
-    delete entry. display_name;
+    delete entry.display_name;
   }
 
   saveManifest(manifest);
 
-  if (maFile.Session && (maFile.Session.SteamLoginSecure || maFile.Session. AccessToken)) {
+  if (maFile.Session && (maFile.Session.SteamLoginSecure || maFile.Session.AccessToken)) {
     const token =
       maFile.Session.SteamLoginSecure ||
       maFile.Session.AccessToken;
@@ -314,7 +372,7 @@ function addAccountFromMaFile(input) {
     }
   }
 
-  return loadAccounts(). find(a => String(a.steamid) === steamid);
+  return loadAccounts().find(a => String(a.steamid) === steamid);
 }
 
 module.exports = {
@@ -326,5 +384,6 @@ module.exports = {
   clearSessionForAccount,
   getManifestSettings,
   isSessionValid,
-  isSessionExpired
+  isSessionExpired,
+  getSessionAge
 };

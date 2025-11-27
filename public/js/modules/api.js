@@ -15,7 +15,7 @@ export class APIClient {
 
       let data;
       try {
-        data = await response. json();
+        data = await response.json();
       } catch {
         data = { error: `HTTP ${response.status}` };
       }
@@ -48,7 +48,7 @@ export class APIClient {
   }
 
   static getAccounts() {
-    return this. get('/api/accounts');
+    return this.get('/api/accounts');
   }
 
   static importAccount(maFileContent) {
@@ -73,7 +73,7 @@ export class APIClient {
   }
 
   static refreshSession(accountId, password) {
-    return this. post(`/api/accounts/${accountId}/refresh-session`, { password });
+    return this.post(`/api/accounts/${accountId}/refresh-session`, { password });
   }
 
   static async getDevices(steamid) {
@@ -125,7 +125,7 @@ export class APIClient {
         if (response.status === 401) {
           throw new Error('LOGIN_REQUIRED');
         }
-        throw new Error(data. error || `HTTP ${response.status}`);
+        throw new Error(data.error || `HTTP ${response.status}`);
       }
       
       const data = await response.json();
@@ -154,7 +154,7 @@ export class APIClient {
         if (response.status === 401) {
           throw new Error('LOGIN_REQUIRED');
         }
-        throw new Error(data. error || `HTTP ${response.status}`);
+        throw new Error(data.error || `HTTP ${response.status}`);
       }
       
       const data = await response.json();
@@ -176,7 +176,7 @@ export class APIClient {
   }
 
   static addPhone(setupId, phoneNumber) {
-    return this. post('/api/setup/add-phone', { setupId, phoneNumber });
+    return this.post('/api/setup/add-phone', { setupId, phoneNumber });
   }
 
   static sendPhoneSMS(setupId) {

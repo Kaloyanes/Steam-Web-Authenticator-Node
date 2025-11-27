@@ -43,7 +43,7 @@ const app = express();
 const PORT = 3000;
 
 app.use(cors());
-app. use(bodyParser.json({ limit: '50mb' }));
+app.use(bodyParser.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 app.get('/', (req, res) =>
@@ -56,7 +56,7 @@ app.get('/api/manifest', (req, res) => {
 });
 
 app.get('/api/accounts', (req, res) => {
-  const accounts = loadAccounts(). map((a) => ({
+  const accounts = loadAccounts().map((a) => ({
     id: a.id,
     account_name: a.account_name,
     steamid: a.steamid
@@ -66,14 +66,14 @@ app.get('/api/accounts', (req, res) => {
 
 app.post('/api/accounts', (req, res) => {
   try {
-    const input = req.body. maFileContent || req.body. maFile;
+    const input = req.body.maFileContent || req.body.maFile;
     const account = addAccountFromMaFile(input);
     res
       .status(201)
       .json({ account: { id: account.id, account_name: account.account_name } });
   } catch (err) {
-    console.error('Import Error:', err. message);
-    res.status(400).json({ error: err. message });
+    console.error('Import Error:', err.message);
+    res.status(400).json({ error: err.message });
   }
 });
 
@@ -93,8 +93,8 @@ app.get('/api/accounts/:id/code', (req, res) => {
 });
 
 app.post('/api/accounts/:id/confirmations/details', async (req, res) => {
-  const account = loadAccounts().find((a) => a.id === req. params.id);
-  if (! account) return res.status(404).json({ error: 'Account not found' });
+  const account = loadAccounts().find((a) => a.id === req.params.id);
+  if (!  account) return res.status(404).json({ error: 'Account not found' });
 
   const { confirmationId, key, type, rawType, creatorId } = req.body;
 
@@ -121,7 +121,7 @@ app.post('/api/accounts/:id/login', async (req, res) => {
   if (!password) return res.status(400).json({ error: 'Password required' });
 
   const account = loadAccounts().find(a => a.id === req.params.id);
-  if (!account) return res.status(404). json({ error: 'Account not found' });
+  if (! account) return res.status(404).json({ error: 'Account not found' });
 
   try {
     await loginAccount(account, password);
@@ -134,7 +134,7 @@ app.post('/api/accounts/:id/login', async (req, res) => {
 
 app.get('/api/accounts/:id/session/validate', (req, res) => {
   try {
-    const account = loadAccounts().find(a => a.id === req. params.id);
+    const account = loadAccounts().find(a => a.id === req.params.id);
     if (! account) return res.status(404).json({ error: 'Account not found' });
 
     const validationResult = isSessionValid(account.id);
@@ -152,12 +152,12 @@ app.get('/api/accounts/:id/session/validate', (req, res) => {
 });
 
 app.get('/api/accounts/:id/confirmations', async (req, res) => {
-  const account = loadAccounts().find((a) => a.id === req.params. id);
+  const account = loadAccounts().find((a) => a.id === req.params.id);
   if (!account) return res.status(404).json({ error: 'Account not found' });
 
   try {
     const data = await fetchConfirmations(account);
-    res.json({ confirmations: data. conf || [] });
+    res.json({ confirmations: data.conf || [] });
   } catch (err) {
     console.error('Conf Error:', err.message);
     if (err.message === 'LOGIN_REQUIRED') {
@@ -173,9 +173,29 @@ app.post('/api/accounts/:id/confirmations/act', async (req, res) => {
   if (!account) return res.status(404).json({ error: 'Account not found' });
 
   try {
+    // Validate input
+    if (!op || !Array.isArray(confirmations) || confirmations.length === 0) {
+      console.error('[Confirmations] Invalid input: op=' + op + ', confirmations length=' + (confirmations ? confirmations.length : 'null'));
+      return res.status(400).json({ error: 'Invalid request: op and confirmations array required' });
+    }
+
+    // Validate each confirmation has required fields
+    for (const conf of confirmations) {
+      if (!conf.id && !conf.confirmationId) {
+        console.error('[Confirmations] Confirmation missing id/confirmationId:', conf);
+        return res.status(400).json({ error: 'Each confirmation must have an id or confirmationId' });
+      }
+      if (!conf.key && !conf.nonce) {
+        console.error('[Confirmations] Confirmation missing key/nonce:', conf);
+        return res.status(400).json({ error: 'Each confirmation must have a key or nonce' });
+      }
+    }
+
+    console.log(`[Confirmations] Acting on ${confirmations.length} confirmations with op: ${op}`);
     await actOnConfirmations(account, op, confirmations);
     res.json({ success: true });
   } catch (err) {
+    console.error('[Confirmations] Error:', err.message, err.stack);
     if (err.message === 'LOGIN_REQUIRED') {
       return res.status(401).json({ error: 'LOGIN_REQUIRED' });
     }
@@ -223,7 +243,7 @@ app.post('/api/setup/send-phone-sms', async (req, res) => {
     const result = await sendPhoneVerificationSMS(setupId);
     res.json(result);
   } catch (err) {
-    res.status(400).json({ error: err. message });
+    res.status(400).json({ error: err.message });
   }
 });
 
@@ -260,8 +280,8 @@ app.post('/api/setup/finalize', async (req, res) => {
 
 app.get('/api/accounts/:id/session-status', (req, res) => {
   try {
-    const account = loadAccounts().find(a => a.id === req. params.id);
-    if (! account) return res.status(404).json({ error: 'Account not found' });
+    const account = loadAccounts().find(a => a.id === req.params.id);
+    if (!  account) return res.status(404).json({ error: 'Account not found' });
 
     const saved = getSessionCookiesForAccount(account.id);
     
@@ -269,10 +289,34 @@ app.get('/api/accounts/:id/session-status', (req, res) => {
       hasSession: !!saved,
       accountName: account.account_name,
       steamid: account.steamid,
-      lastUsed: saved?. lastUsed || null
+      lastUsed: saved?.lastUsed || null
     });
   } catch (err) {
     console.error('[Session Status] Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/accounts/:id/session-info', (req, res) => {
+  try {
+    const account = loadAccounts().find(a => a.id === req.params.id);
+    if (! account) return res.status(404).json({ error: 'Account not found' });
+
+    const { getSessionAge } = require('./storage');
+    const validationResult = isSessionValid(account.id);
+    const ageInfo = getSessionAge(account.id);
+    
+    res.json({
+      valid: validationResult.valid,
+      reason: validationResult.reason || null,
+      accountName: account.account_name,
+      steamid: account.steamid,
+      age: ageInfo,
+      maxAgeDays: 30,
+      idleTimeoutDays: 7
+    });
+  } catch (err) {
+    console.error('[Session Info] Error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -282,7 +326,7 @@ app.post('/api/accounts/:id/refresh-session', async (req, res) => {
     const { password } = req.body;
     if (!password) return res.status(400).json({ error: 'Password required' });
 
-    const account = loadAccounts().find(a => a.id === req. params.id);
+    const account = loadAccounts().find(a => a.id === req.params.id);
     if (! account) return res.status(404).json({ error: 'Account not found' });
 
     console.log(`[Session] Refreshing session for ${account.account_name}...`);
@@ -299,7 +343,7 @@ app.post('/api/accounts/:id/refresh-session', async (req, res) => {
 app.get('/api/accounts/:id/security-status', (req, res) => {
   try {
     const account = loadAccounts().find(a => a.id === req.params.id);
-    if (!account) return res.status(404).json({ error: 'Account not found' });
+    if (! account) return res.status(404).json({ error: 'Account not found' });
 
     const status = getSecurityStatus(account);
     res.json(status);
@@ -309,7 +353,7 @@ app.get('/api/accounts/:id/security-status', (req, res) => {
 });
 
 app.get('/api/accounts/:id/devices', async (req, res) => {
-  const account = loadAccounts().find(a => a.id === req. params.id);
+  const account = loadAccounts().find(a => a.id === req.params.id);
   if (! account) return res.status(404).json({ error: 'Account not found' });
 
   try {
@@ -326,13 +370,13 @@ app.get('/api/accounts/:id/devices', async (req, res) => {
 
 app.post('/api/accounts/:id/devices/:deviceId/remove', async (req, res) => {
   const account = loadAccounts().find(a => a.id === req.params.id);
-  if (!account) return res.status(404). json({ error: 'Account not found' });
+  if (! account) return res.status(404).json({ error: 'Account not found' });
 
   try {
     const result = await removeDevice(account, req.params.deviceId);
     res.json(result);
   } catch (err) {
-    console.error('Device removal error:', err.message);
+    console.error('Device removal error:', err.message, err.stack);
     if (err.message === 'LOGIN_REQUIRED') {
       return res.status(401).json({ error: 'LOGIN_REQUIRED' });
     }
@@ -348,84 +392,69 @@ app.post('/api/accounts/:id/devices/remove-all', async (req, res) => {
     const result = await removeAllDevices(account);
     res.json(result);
   } catch (err) {
-    console.error('Remove all devices error:', err.message);
+    console.error('Remove all devices error:', err.message, err.stack);
     if (err.message === 'LOGIN_REQUIRED') {
       return res.status(401).json({ error: 'LOGIN_REQUIRED' });
     }
-    res.status(400). json({ error: err.message });
+    res.status(400).json({ error: err.message });
   }
 });
 
 
-app.get('/api/security/:steamid/devices', (req, res) => {
+app.get('/api/security/:steamid/devices', async (req, res) => {
   try {
-    const account = loadAccounts().find(a => a.steamid === req. params.steamid);
+    const account = loadAccounts().find(a => a.steamid === req.params.steamid);
     if (!account) {
       return res.status(404).json({ error: 'Account not found' });
     }
 
-    getDevicesFromSettings(account)
-      .then(devices => {
-        console.log('[API] Returning', devices.length, 'devices');
-        res.json({ devices });
-      })
-      .catch(err => {
-        console.error('[API] Error getting devices:', err);
-        if (err.message === 'LOGIN_REQUIRED') {
-          return res.status(401).json({ error: 'LOGIN_REQUIRED' });
-        }
-        res.status(500).json({ error: err.message });
-      });
+    console.log('[API] Getting devices for steamid:', req.params.steamid);
+    const devices = await getDevicesFromSettings(account);
+    console.log('[API] Returning', devices.length, 'devices');
+    res.json({ devices });
   } catch (err) {
-    console.error('[API] Error:', err);
-    res.status(500). json({ error: err.message });
-  }
-});
-
-app. delete('/api/security/:steamid/devices/:deviceId', (req, res) => {
-  try {
-    const account = loadAccounts().find(a => a.steamid === req.params. steamid);
-    if (!account) {
-      return res.status(404).json({ error: 'Account not found' });
+    console.error('[API] Error getting devices:', err.message, err.stack);
+    if (err.message === 'LOGIN_REQUIRED') {
+      return res.status(401).json({ error: 'LOGIN_REQUIRED' });
     }
-
-    removeDevice(account, req.params. deviceId)
-      .then(result => {
-        res.json(result);
-      })
-      .catch(err => {
-        console.error('[API] Error removing device:', err);
-        if (err.message === 'LOGIN_REQUIRED') {
-          return res.status(401).json({ error: 'LOGIN_REQUIRED' });
-        }
-        res. status(500).json({ error: err.message });
-      });
-  } catch (err) {
-    console.error('[API] Error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-app.delete('/api/security/:steamid/devices/all', (req, res) => {
+app.delete('/api/security/:steamid/devices/:deviceId', async (req, res) => {
   try {
-    const account = loadAccounts().find(a => a.steamid === req. params.steamid);
+    const account = loadAccounts().find(a => a.steamid === req.params.steamid);
     if (!account) {
       return res.status(404).json({ error: 'Account not found' });
     }
 
-    removeAllDevices(account)
-      .then(result => {
-        res. json(result);
-      })
-      .catch(err => {
-        console.error('[API] Error removing all devices:', err);
-        if (err.message === 'LOGIN_REQUIRED') {
-          return res.status(401).json({ error: 'LOGIN_REQUIRED' });
-        }
-        res.status(500).json({ error: err.message });
-      });
+    console.log('[API] Deleting device:', req.params.deviceId);
+    const result = await removeDevice(account, req.params.deviceId);
+    res.json(result);
   } catch (err) {
-    console.error('[API] Error:', err);
+    console.error('[API] Error removing device:', err.message, err.stack);
+    if (err.message === 'LOGIN_REQUIRED') {
+      return res.status(401).json({ error: 'LOGIN_REQUIRED' });
+    }
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/security/:steamid/devices/all', async (req, res) => {
+  try {
+    const account = loadAccounts().find(a => a.steamid === req.params.steamid);
+    if (!account) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+
+    console.log('[API] Deleting all devices');
+    const result = await removeAllDevices(account);
+    res.json(result);
+  } catch (err) {
+    console.error('[API] Error removing all devices:', err.message, err.stack);
+    if (err.message === 'LOGIN_REQUIRED') {
+      return res.status(401).json({ error: 'LOGIN_REQUIRED' });
+    }
     res.status(500).json({ error: err.message });
   }
 });
@@ -436,24 +465,24 @@ app.post('/api/accounts/:id/authenticator/remove', async (req, res) => {
     return res.status(400).json({ error: 'Revocation code required' });
   }
 
-  const account = loadAccounts().find(a => a.id === req. params.id);
+  const account = loadAccounts().find(a => a.id === req.params.id);
   if (! account) return res.status(404).json({ error: 'Account not found' });
 
   try {
     const result = await removeAuthenticator(account, revocationCode);
     res.json(result);
   } catch (err) {
-    console.error('Authenticator removal error:', err. message);
-    if (err. message === 'LOGIN_REQUIRED') {
+    console.error('Authenticator removal error:', err.message);
+    if (err.message === 'LOGIN_REQUIRED') {
       return res.status(401).json({ error: 'LOGIN_REQUIRED' });
     }
-    res.status(400).json({ error: err. message });
+    res.status(400).json({ error: err.message });
   }
 });
 
 app.get('/api/accounts/:id/backup-codes', async (req, res) => {
-  const account = loadAccounts(). find(a => a.id === req.params.id);
-  if (!account) return res.status(404).json({ error: 'Account not found' });
+  const account = loadAccounts().find(a => a.id === req.params.id);
+  if (! account) return res.status(404).json({ error: 'Account not found' });
 
   try {
     const codes = await getBackupCodes(account);

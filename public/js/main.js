@@ -12,10 +12,10 @@ class SteamGuardApp {
     this.ui = new UIManager();
     this.accounts = [];
     this.selectedAccount = null;
-    this. isLoadingAccount = false;
+    this.isLoadingAccount = false;
 
     this.accountManager = new AccountManager(this.ui);
-    this. guardCodeDisplay = null;
+    this.guardCodeDisplay = null;
     this.confirmationsPanel = null;
     this.securityPanel = null;
   }
@@ -50,11 +50,11 @@ class SteamGuardApp {
       </div>
     `;
 
-    new SetupPanel(). render(document.getElementById('setupPanel'));
-    new ImportPanel(this). render(document.getElementById('importPanel'));
+    new SetupPanel().render(document.getElementById('setupPanel'));
+    new ImportPanel(this).render(document.getElementById('importPanel'));
     this.guardCodeDisplay = new GuardCodeDisplay();
     this.confirmationsPanel = new ConfirmationsPanel(this.ui);
-    this. securityPanel = new SecurityPanel(this.ui);
+    this.securityPanel = new SecurityPanel(this.ui);
   }
 
   async loadAccounts() {
@@ -118,7 +118,7 @@ class SteamGuardApp {
       console.log(`[App] Selecting account: ${account.account_name}`);
       this.selectedAccount = account;
 
-      document.querySelectorAll('.account-btn'). forEach(btn => {
+      document.querySelectorAll('.account-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.accountId === account.id);
       });
 
@@ -135,7 +135,7 @@ class SteamGuardApp {
       await this.loadAccountData(account);
     } catch (error) {
       console.error('[App] Error selecting account:', error);
-      this. ui.showError('Error loading account: ' + error.message);
+      this.ui.showError('Error loading account: ' + error.message);
       this.clearSideContent();
     } finally {
       this.isLoadingAccount = false;
@@ -169,26 +169,26 @@ class SteamGuardApp {
       const validation = await APIClient.validateSession(account.id);
       
       if (validation.valid) {
-        console. log(`[App] Session is valid`);
+        console.log(`[App] Session is valid`);
         return true;
       } else {
         console.log(`[App] Session invalid: ${validation.reason}`);
         
         let message = 'Session validation failed';
-        if (validation. reason === 'NO_SESSION') {
-          message = 'No session found. Please login. ';
+        if (validation.reason === 'NO_SESSION') {
+          message = 'No session found.Please login.';
         } else if (validation.reason === 'SESSION_EXPIRED') {
-          message = 'Session expired. Please login again.';
+          message = 'Session expired.Please login again.';
         } else if (validation.reason === 'INCOMPLETE_SESSION') {
-          message = 'Session data incomplete. Please login again.';
+          message = 'Session data incomplete.Please login again.';
         }
         
         this.ui.showWarning(message);
         return false;
       }
     } catch (error) {
-      console. error('[App] Session validation error:', error);
-      this.ui.showWarning('Session validation failed.  Please login.');
+      console.error('[App] Session validation error:', error);
+      this.ui.showWarning('Session validation failed. Please login.');
       return false;
     }
   }
@@ -199,85 +199,117 @@ class SteamGuardApp {
     document.getElementById('securityPanel').innerHTML = '';
   }
 
-  async showLoginForm(account) {
-    console.log(`[App] Showing login form for ${account.account_name}`);
-    
-    const container = document.getElementById('guardCodePanel');
-    container.innerHTML = `
-      <div class="collapsible-panel expanded">
-        <div class="panel-header">
-          <div class="panel-header-title">
-            <span>🔐</span>
-            <span>Session Required</span>
+  // Update the showLoginForm method to show session age if expired
+
+async showLoginForm(account) {
+  console.log(`[App] Showing login form for ${account.account_name}`);
+  
+  // Try to get session info
+  let sessionInfo = null;
+  try {
+    const response = await fetch(`/api/accounts/${account.id}/session-info`);
+    if (response.ok) {
+      sessionInfo = await response.json();
+    }
+  } catch (e) {
+    // Ignore error
+  }
+
+  let sessionMessage = '';
+  if (sessionInfo?.age) {
+    if (sessionInfo.reason === 'SESSION_EXPIRED') {
+      sessionMessage = `
+        <div style="background: var(--bg-tertiary); padding: 10px; border-radius: 6px; margin-bottom: 15px; border-left: 3px solid var(--color-warning);">
+          <div style="font-size: 0.85rem; color: var(--text-secondary);">
+            Session expired after ${sessionInfo.age.ageFormatted} of inactivity.
           </div>
         </div>
-        <div class="panel-content">
-          <div style="padding: 20px; background: linear-gradient(135deg, var(--bg-accent) 0%, var(--bg-secondary) 100%); border: 2px solid var(--color-primary); border-radius: 8px;">
-            <h4 style="margin: 0 0 15px 0; color: var(--color-primary);">🔓 Login Required</h4>
-            
-            <p style="margin: 0 0 15px 0; font-size: 0.95rem; color: var(--text-secondary);">
-              Enter your Steam password to create a session:
-            </p>
-
-            <div style="background: var(--bg-tertiary); padding: 12px; border-radius: 6px; margin-bottom: 15px; border-left: 3px solid var(--color-primary);">
-              <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 4px;">Account</div>
-              <div style="font-weight: 600; color: var(--text-primary);">${account.account_name}</div>
-            </div>
-
-            <input 
-              type="password" 
-              id="loginPassword" 
-              placeholder="Enter your Steam password" 
-              autocomplete="off"
-              style="width: 100%; padding: 10px; border: 1px solid var(--border-primary); border-radius: 4px; background: var(--bg-secondary); color: var(--text-primary); font-size: 0.95rem; margin-bottom: 12px;"
-            />
-
-            <button 
-              id="loginBtn" 
-              style="width: 100%; padding: 12px; background: var(--color-primary); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;"
-            >
-              🔓 Login & Load Account
-            </button>
-
-            <div id="loginStatus" style="margin-top: 12px;"></div>
-          </div>
+      `;
+    }
+  }
+  
+  const container = document.getElementById('guardCodePanel');
+  container.innerHTML = `
+    <div class="collapsible-panel expanded">
+      <div class="panel-header">
+        <div class="panel-header-title">
+          <span>🔐</span>
+          <span>Session Required</span>
         </div>
       </div>
-    `;
+      <div class="panel-content">
+        <div style="padding: 20px; background: linear-gradient(135deg, var(--bg-accent) 0%, var(--bg-secondary) 100%); border: 2px solid var(--color-primary); border-radius: 8px;">
+          <h4 style="margin: 0 0 15px 0; color: var(--color-primary);">🔓 Login Required</h4>
+          
+          ${sessionMessage}
+          
+          <p style="margin: 0 0 15px 0; font-size: 0.95rem; color: var(--text-secondary);">
+            Enter your Steam password to create a session:
+          </p>
 
-    const loginBtn = document.getElementById('loginBtn');
-    const passwordInput = document.getElementById('loginPassword');
-    const statusDiv = document.getElementById('loginStatus');
+          <div style="background: var(--bg-tertiary); padding: 12px; border-radius: 6px; margin-bottom: 15px; border-left: 3px solid var(--color-primary);">
+            <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 4px;">Account</div>
+            <div style="font-weight: 600; color: var(--text-primary);">${account.account_name}</div>
+          </div>
 
-    const handleLogin = async () => {
-      const password = passwordInput.value. trim();
-      if (!password) {
-        statusDiv.innerHTML = '<div class="status-message status-error">Password required</div>';
-        return;
-      }
+          <input 
+            type="password" 
+            id="loginPassword" 
+            placeholder="Enter your Steam password" 
+            autocomplete="off"
+            style="width: 100%; padding: 10px; border: 1px solid var(--border-primary); border-radius: 4px; background: var(--bg-secondary); color: var(--text-primary); font-size: 0.95rem; margin-bottom: 12px;"
+          />
 
-      loginBtn.disabled = true;
-      statusDiv.innerHTML = '<div class="status-message status-info">⏳ Logging in...</div>';
+          <button 
+            id="loginBtn" 
+            style="width: 100%; padding: 12px; background: var(--color-primary); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;"
+          >
+            🔓 Login & Load Account
+          </button>
 
-      try {
-        await APIClient.refreshSession(account.id, password);
-        statusDiv.innerHTML = '<div class="status-message status-success">✓ Login successful!  Loading account...</div>';
-        passwordInput.value = '';
+          <div id="loginStatus" style="margin-top: 12px;"></div>
+          
+          <p style="margin: 15px 0 0 0; font-size: 0.75rem; color: var(--text-tertiary); text-align: center; border-top: 1px solid var(--border-primary); padding-top: 12px;">
+            Sessions remain active for 30 days with regular use
+          </p>
+        </div>
+      </div>
+    </div>
+  `;
 
-        setTimeout(() => {
-          this.selectAccount(account);
-        }, 1000);
-      } catch (error) {
-        statusDiv. innerHTML = `<div class="status-message status-error">❌ Login failed: ${error. message}</div>`;
-        loginBtn.disabled = false;
-      }
-    };
+  const loginBtn = document.getElementById('loginBtn');
+  const passwordInput = document.getElementById('loginPassword');
+  const statusDiv = document.getElementById('loginStatus');
 
-    loginBtn.addEventListener('click', handleLogin);
-    passwordInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') handleLogin();
-    });
-  }
+  const handleLogin = async () => {
+    const password = passwordInput.value.trim();
+    if (!password) {
+      statusDiv.innerHTML = '<div class="status-message status-error">Password required</div>';
+      return;
+    }
+
+    loginBtn.disabled = true;
+    statusDiv.innerHTML = '<div class="status-message status-info">⏳ Logging in...</div>';
+
+    try {
+      await APIClient.refreshSession(account.id, password);
+      statusDiv.innerHTML = '<div class="status-message status-success">✓ Login successful!  Loading account...</div>';
+      passwordInput.value = '';
+
+      setTimeout(() => {
+        this.selectAccount(account);
+      }, 1000);
+    } catch (error) {
+      statusDiv.innerHTML = `<div class="status-message status-error">❌ Login failed: ${error.message}</div>`;
+      loginBtn.disabled = false;
+    }
+  };
+
+  loginBtn.addEventListener('click', handleLogin);
+  passwordInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') handleLogin();
+  });
+}
 
   async loadAccountData(account) {
     console.log(`[App] Loading account data for ${account.account_name}...`);
@@ -299,14 +331,14 @@ class SteamGuardApp {
         document.getElementById('securityPanel'),
         account
       );
-      await this.securityPanel. loadWithRetry(account);
+      await this.securityPanel.loadWithRetry(account);
 
       this.ui.showSuccess(`Loaded: ${account.account_name}`);
     } catch (error) {
       console.error('[App] Error loading account data:', error);
       
       if (error.message === 'LOGIN_REQUIRED') {
-        this.ui.showError('Session expired. Please login again.');
+        this.ui.showError('Session expired.Please login again.');
         await this.showLoginForm(account);
       } else {
         this.ui.showError('Error loading account data: ' + error.message);
