@@ -1,5 +1,3 @@
-// confirmationDetails.js - Rich confirmation details
-
 const crypto = require('crypto');
 const axios = require('axios');
 const cheerio = require('cheerio');

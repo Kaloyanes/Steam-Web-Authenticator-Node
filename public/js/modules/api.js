@@ -1,4 +1,3 @@
-
 const API_BASE = '';
 
 export class APIClient {
@@ -16,7 +15,7 @@ export class APIClient {
 
       let data;
       try {
-        data = await response.json();
+        data = await response. json();
       } catch {
         data = { error: `HTTP ${response.status}` };
       }
@@ -49,7 +48,7 @@ export class APIClient {
   }
 
   static getAccounts() {
-    return this.get('/api/accounts');
+    return this. get('/api/accounts');
   }
 
   static importAccount(maFileContent) {
@@ -58,6 +57,11 @@ export class APIClient {
 
   static getGuardCode(accountId) {
     return this.get(`/api/accounts/${accountId}/code`);
+  }
+
+  // NEW: Validate session
+  static validateSession(accountId) {
+    return this.get(`/api/accounts/${accountId}/session/validate`);
   }
 
   static getConfirmations(accountId) {
@@ -69,7 +73,7 @@ export class APIClient {
   }
 
   static refreshSession(accountId, password) {
-    return this.post(`/api/accounts/${accountId}/refresh-session`, { password });
+    return this. post(`/api/accounts/${accountId}/refresh-session`, { password });
   }
 
   static async getDevices(steamid) {
@@ -84,7 +88,11 @@ export class APIClient {
       console.log('[API] getDevices response status:', response.status);
       
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        if (response.status === 401) {
+          throw new Error('LOGIN_REQUIRED');
+        }
+        throw new Error(data.error || `HTTP ${response.status}`);
       }
       
       const data = await response.json();
@@ -97,7 +105,7 @@ export class APIClient {
       return devices;
     } catch (error) {
       console.error('[API] getDevices error:', error);
-      return [];
+      throw error;
     }
   }
 
@@ -113,7 +121,11 @@ export class APIClient {
       console.log('[API] removeDevice response status:', response.status);
       
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        if (response.status === 401) {
+          throw new Error('LOGIN_REQUIRED');
+        }
+        throw new Error(data. error || `HTTP ${response.status}`);
       }
       
       const data = await response.json();
@@ -138,7 +150,11 @@ export class APIClient {
       console.log('[API] removeAllDevices response status:', response.status);
       
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        if (response.status === 401) {
+          throw new Error('LOGIN_REQUIRED');
+        }
+        throw new Error(data. error || `HTTP ${response.status}`);
       }
       
       const data = await response.json();
@@ -160,7 +176,7 @@ export class APIClient {
   }
 
   static addPhone(setupId, phoneNumber) {
-    return this.post('/api/setup/add-phone', { setupId, phoneNumber });
+    return this. post('/api/setup/add-phone', { setupId, phoneNumber });
   }
 
   static sendPhoneSMS(setupId) {

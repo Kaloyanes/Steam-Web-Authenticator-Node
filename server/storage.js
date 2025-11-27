@@ -1,14 +1,15 @@
-
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const MANIFEST_FILE = path.join(DATA_DIR, 'manifest.json');
-const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
+const SESSIONS_FILE = path. join(DATA_DIR, 'sessions.json');
+
+const SESSION_EXPIRY_MS = 24 * 60 * 60 * 1000;
 
 function ensureDataDir() {
-  if (!fs.existsSync(DATA_DIR)) {
+  if (!fs. existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
 }
@@ -33,7 +34,7 @@ function parseMaFileSafe(input) {
 
     return JSON.parse(safeString);
   } catch (e) {
-    console.error('Safe Parse Failed:', e.message);
+    console.error('Safe Parse Failed:', e. message);
     return JSON.parse(input);
   }
 }
@@ -64,7 +65,7 @@ function saveManifest(manifest) {
 function getManifestSettings() {
   const manifest = loadManifest();
   return {
-    entries: manifest.entries.length,
+    entries: manifest.entries. length,
     hasEncryption: !!manifest.encryption || manifest.entries.some(e => e.encryption_iv || e.encryption_salt)
   };
 }
@@ -90,16 +91,16 @@ function loadAccounts() {
 
   for (const entry of entries) {
     const steamid = String(entry.steamid || '');
-    if (!steamid) continue;
+    if (! steamid) continue;
 
     const filename = entry.filename || `${steamid}.maFile`;
     const fullPath = path.join(DATA_DIR, filename);
 
-    if (!fs.existsSync(fullPath)) continue;
+    if (! fs.existsSync(fullPath)) continue;
 
     let maFile;
     try {
-      maFile = parseMaFileSafe(fs.readFileSync(fullPath, 'utf8'));
+      maFile = parseMaFileSafe(fs. readFileSync(fullPath, 'utf8'));
     } catch {
       continue;
     }
@@ -138,7 +139,7 @@ function loadSessionStore() {
 
 function saveSessionStore(store) {
   ensureDataDir();
-  fs.writeFileSync(SESSIONS_FILE, JSON.stringify(store, null, 2));
+  fs.writeFileSync(SESSIONS_FILE, JSON. stringify(store, null, 2));
 }
 
 function getSessionCookiesForAccount(accountId) {
@@ -152,6 +153,36 @@ function getSessionCookiesForAccount(accountId) {
 
   console.log(`[Sessions] Loaded session for ${accountId}`);
   return session;
+}
+
+function isSessionExpired(session) {
+  if (!session || !session.createdAt) {
+    return true;
+  }
+
+  const createdAt = new Date(session.createdAt). getTime();
+  const now = Date.now();
+  const age = now - createdAt;
+
+  return age > SESSION_EXPIRY_MS;
+}
+
+function isSessionValid(accountId) {
+  const session = getSessionCookiesForAccount(accountId);
+  
+  if (!session) {
+    return { valid: false, reason: 'NO_SESSION' };
+  }
+
+  if (! session.sessionid || !session.steamLoginSecure) {
+    return { valid: false, reason: 'INCOMPLETE_SESSION' };
+  }
+
+  if (isSessionExpired(session)) {
+    return { valid: false, reason: 'SESSION_EXPIRED' };
+  }
+
+  return { valid: true, session };
 }
 
 function setSessionCookiesForAccount(
@@ -180,7 +211,7 @@ function setSessionCookiesForAccount(
 function updateSessionLastUsed(accountId) {
   const store = loadSessionStore();
   if (store.sessions && store.sessions[accountId]) {
-    store.sessions[accountId].lastUsed = new Date().toISOString();
+    store.sessions[accountId]. lastUsed = new Date().toISOString();
     saveSessionStore(store);
   }
 }
@@ -207,7 +238,7 @@ function addAccountFromMaFile(input) {
     throw new Error('Invalid maFile input type');
   }
 
-  let steamid = maFile.steamid || (maFile.Session ? maFile.Session.SteamID : null);
+  let steamid = maFile.steamid || (maFile.Session ?  maFile.Session.SteamID : null);
   if (!steamid) {
     throw new Error('Invalid maFile: missing SteamID');
   }
@@ -219,7 +250,7 @@ function addAccountFromMaFile(input) {
   }
 
   if (!maFile.device_id && (maFile.deviceID || maFile.deviceId)) {
-    maFile.device_id = maFile.deviceID || maFile.deviceId;
+    maFile.device_id = maFile.deviceID || maFile. deviceId;
   }
 
   const filename = `${steamid}.maFile`;
@@ -227,7 +258,7 @@ function addAccountFromMaFile(input) {
   fs.writeFileSync(fullPath, JSON.stringify(maFile, null, 2));
 
   const manifest = loadManifest();
-  if (!manifest.entries) manifest.entries = [];
+  if (! manifest.entries) manifest.entries = [];
 
   let entry = manifest.entries.find(e => String(e.steamid) === steamid);
 
@@ -240,15 +271,15 @@ function addAccountFromMaFile(input) {
       auto_confirm_trades: false,
       auto_confirm_market_transactions: false
     };
-    manifest.entries.push(entry);
+    manifest.entries. push(entry);
   } else {
-    if (!Object.prototype.hasOwnProperty.call(entry, 'filename')) {
+    if (! Object.prototype.hasOwnProperty.call(entry, 'filename')) {
       entry.filename = filename;
     }
     if (!Object.prototype.hasOwnProperty.call(entry, 'encryption_iv')) {
       entry.encryption_iv = null;
     }
-    if (!Object.prototype.hasOwnProperty.call(entry, 'encryption_salt')) {
+    if (!Object.prototype.hasOwnProperty. call(entry, 'encryption_salt')) {
       entry.encryption_salt = null;
     }
     if (!Object.prototype.hasOwnProperty.call(entry, 'auto_confirm_trades')) {
@@ -264,12 +295,12 @@ function addAccountFromMaFile(input) {
     }
 
     delete entry.account_name;
-    delete entry.display_name;
+    delete entry. display_name;
   }
 
   saveManifest(manifest);
 
-  if (maFile.Session && (maFile.Session.SteamLoginSecure || maFile.Session.AccessToken)) {
+  if (maFile.Session && (maFile.Session.SteamLoginSecure || maFile.Session. AccessToken)) {
     const token =
       maFile.Session.SteamLoginSecure ||
       maFile.Session.AccessToken;
@@ -283,7 +314,7 @@ function addAccountFromMaFile(input) {
     }
   }
 
-  return loadAccounts().find(a => String(a.steamid) === steamid);
+  return loadAccounts(). find(a => String(a.steamid) === steamid);
 }
 
 module.exports = {
@@ -293,5 +324,7 @@ module.exports = {
   setSessionCookiesForAccount,
   updateSessionLastUsed,
   clearSessionForAccount,
-  getManifestSettings
+  getManifestSettings,
+  isSessionValid,
+  isSessionExpired
 };

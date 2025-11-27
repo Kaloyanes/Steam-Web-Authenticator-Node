@@ -1,4 +1,3 @@
-
 import { APIClient } from './modules/api.js';
 import { UIManager } from './modules/ui-manager.js';
 import { AccountManager } from './modules/account-manager.js';
@@ -13,10 +12,10 @@ class SteamGuardApp {
     this.ui = new UIManager();
     this.accounts = [];
     this.selectedAccount = null;
-    this.isLoadingAccount = false;
+    this. isLoadingAccount = false;
 
     this.accountManager = new AccountManager(this.ui);
-    this.guardCodeDisplay = null;
+    this. guardCodeDisplay = null;
     this.confirmationsPanel = null;
     this.securityPanel = null;
   }
@@ -51,11 +50,11 @@ class SteamGuardApp {
       </div>
     `;
 
-    new SetupPanel().render(document.getElementById('setupPanel'));
-    new ImportPanel(this).render(document.getElementById('importPanel'));
+    new SetupPanel(). render(document.getElementById('setupPanel'));
+    new ImportPanel(this). render(document.getElementById('importPanel'));
     this.guardCodeDisplay = new GuardCodeDisplay();
     this.confirmationsPanel = new ConfirmationsPanel(this.ui);
-    this.securityPanel = new SecurityPanel(this.ui);
+    this. securityPanel = new SecurityPanel(this.ui);
   }
 
   async loadAccounts() {
@@ -119,15 +118,16 @@ class SteamGuardApp {
       console.log(`[App] Selecting account: ${account.account_name}`);
       this.selectedAccount = account;
 
-      document.querySelectorAll('.account-btn').forEach(btn => {
+      document.querySelectorAll('.account-btn'). forEach(btn => {
         btn.classList.toggle('active', btn.dataset.accountId === account.id);
       });
 
       this.clearSideContent();
+      this.showLoadingState();
 
-      const hasValidSession = await this.validateSession(account);
+      const sessionValid = await this.validateSession(account);
 
-      if (!hasValidSession) {
+      if (!sessionValid) {
         await this.showLoginForm(account);
         return;
       }
@@ -135,26 +135,61 @@ class SteamGuardApp {
       await this.loadAccountData(account);
     } catch (error) {
       console.error('[App] Error selecting account:', error);
-      this.ui.showError('Error loading account: ' + error.message);
+      this. ui.showError('Error loading account: ' + error.message);
+      this.clearSideContent();
     } finally {
       this.isLoadingAccount = false;
     }
+  }
+
+  showLoadingState() {
+    const guardPanel = document.getElementById('guardCodePanel');
+    guardPanel.innerHTML = `
+      <div class="collapsible-panel expanded">
+        <div class="panel-header">
+          <div class="panel-header-title">
+            <span>🔐</span>
+            <span>Validating Session</span>
+          </div>
+        </div>
+        <div class="panel-content">
+          <div style="padding: 20px; text-align: center;">
+            <div class="spinner" style="margin: 0 auto 10px;"></div>
+            <div style="color: var(--text-secondary);">Checking session validity...</div>
+          </div>
+        </div>
+      </div>
+    `;
   }
 
   async validateSession(account) {
     try {
       console.log(`[App] Validating session for ${account.account_name}...`);
       
-      await APIClient.getConfirmations(account.id);
+      const validation = await APIClient.validateSession(account.id);
       
-      console.log(`[App] Session is valid`);
-      return true;
-    } catch (error) {
-      if (error.status === 401) {
-        console.log(`[App] Session invalid (401)`);
+      if (validation.valid) {
+        console. log(`[App] Session is valid`);
+        return true;
+      } else {
+        console.log(`[App] Session invalid: ${validation.reason}`);
+        
+        let message = 'Session validation failed';
+        if (validation. reason === 'NO_SESSION') {
+          message = 'No session found. Please login. ';
+        } else if (validation.reason === 'SESSION_EXPIRED') {
+          message = 'Session expired. Please login again.';
+        } else if (validation.reason === 'INCOMPLETE_SESSION') {
+          message = 'Session data incomplete. Please login again.';
+        }
+        
+        this.ui.showWarning(message);
         return false;
       }
-      throw error;
+    } catch (error) {
+      console. error('[App] Session validation error:', error);
+      this.ui.showWarning('Session validation failed.  Please login.');
+      return false;
     }
   }
 
@@ -215,7 +250,7 @@ class SteamGuardApp {
     const statusDiv = document.getElementById('loginStatus');
 
     const handleLogin = async () => {
-      const password = passwordInput.value.trim();
+      const password = passwordInput.value. trim();
       if (!password) {
         statusDiv.innerHTML = '<div class="status-message status-error">Password required</div>';
         return;
@@ -226,14 +261,14 @@ class SteamGuardApp {
 
       try {
         await APIClient.refreshSession(account.id, password);
-        statusDiv.innerHTML = '<div class="status-message status-success">✓ Login successful! Loading account...</div>';
+        statusDiv.innerHTML = '<div class="status-message status-success">✓ Login successful!  Loading account...</div>';
         passwordInput.value = '';
 
         setTimeout(() => {
           this.selectAccount(account);
         }, 1000);
       } catch (error) {
-        statusDiv.innerHTML = `<div class="status-message status-error">❌ Login failed: ${error.message}</div>`;
+        statusDiv. innerHTML = `<div class="status-message status-error">❌ Login failed: ${error. message}</div>`;
         loginBtn.disabled = false;
       }
     };
@@ -242,8 +277,6 @@ class SteamGuardApp {
     passwordInput.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') handleLogin();
     });
-
-    this.ui.showWarning('Session expired or invalid. Please login.');
   }
 
   async loadAccountData(account) {
@@ -260,18 +293,24 @@ class SteamGuardApp {
         document.getElementById('confirmationsPanel'),
         account
       );
-      await this.confirmationsPanel.load(account);
+      await this.confirmationsPanel.loadWithRetry(account);
 
       this.securityPanel.render(
         document.getElementById('securityPanel'),
         account
       );
-      await this.securityPanel.load(account);
+      await this.securityPanel. loadWithRetry(account);
 
       this.ui.showSuccess(`Loaded: ${account.account_name}`);
     } catch (error) {
       console.error('[App] Error loading account data:', error);
-      this.ui.showError('Error loading account data: ' + error.message);
+      
+      if (error.message === 'LOGIN_REQUIRED') {
+        this.ui.showError('Session expired. Please login again.');
+        await this.showLoginForm(account);
+      } else {
+        this.ui.showError('Error loading account data: ' + error.message);
+      }
     }
   }
 
