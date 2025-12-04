@@ -59,7 +59,6 @@ export class APIClient {
     return this.get(`/api/accounts/${accountId}/code`);
   }
 
-  // NEW: Validate session
   static validateSession(accountId) {
     return this.get(`/api/accounts/${accountId}/session/validate`);
   }

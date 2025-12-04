@@ -353,7 +353,7 @@ async function fetchMobileConfDetails(account, payload) {
           if (parsed.type) type = parsed.type;
           if (parsed.creator) creator = parsed.creator;
           raw = parsed;
-      } catch (e) { /* ignore */ }
+      } catch (e) { }
   } else if (typeof res.data === 'object') {
       html = res.data.html;
       raw = res.data;

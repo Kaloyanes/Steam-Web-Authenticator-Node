@@ -1,4 +1,3 @@
-// accountManagement.js - REAL DEVICES from store.steampowered.com
 
 const crypto = require('crypto');
 const axios = require('axios');
@@ -17,7 +16,6 @@ async function getDevicesFromSettings(account) {
   try {
     const cookieStr = `sessionid=${saved.sessionid}; steamLoginSecure=${saved.steamLoginSecure}`;
 
-    // Fetch the STORE page (not community page) which has device data embedded
     const res = await axios.get('https://store.steampowered.com/account/authorizeddevices', {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -41,7 +39,6 @@ async function getDevicesFromSettings(account) {
 
     console.log('[Devices] Parsing HTML for device data...');
 
-    // Extract active devices from data-active_devices attribute
     const activeDevicesMatch = res.data.match(/data-active_devices="(\[[\s\S]*?\])"/);
     
     if (!activeDevicesMatch) {
@@ -49,7 +46,6 @@ async function getDevicesFromSettings(account) {
       return [];
     }
 
-    // Unescape HTML entities
     const escapedJson = activeDevicesMatch[1].replace(/&quot;/g, '"').replace(/\\\//g, '/');
     
     let deviceList = [];

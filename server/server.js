@@ -173,13 +173,11 @@ app.post('/api/accounts/:id/confirmations/act', async (req, res) => {
   if (!account) return res.status(404).json({ error: 'Account not found' });
 
   try {
-    // Validate input
     if (!op || !Array.isArray(confirmations) || confirmations.length === 0) {
       console.error('[Confirmations] Invalid input: op=' + op + ', confirmations length=' + (confirmations ? confirmations.length : 'null'));
       return res.status(400).json({ error: 'Invalid request: op and confirmations array required' });
     }
 
-    // Validate each confirmation has required fields
     for (let i = 0; i < confirmations.length; i++) {
       const conf = confirmations[i];
       const hasId = conf.id || conf.confirmationId;

@@ -6,11 +6,8 @@ const DATA_DIR = path.join(__dirname, '..', 'data');
 const MANIFEST_FILE = path.join(DATA_DIR, 'manifest.json');
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 
-// Session expiry time: 30 days (Steam typically allows sessions to last this long with activity)
-// Steam sessions can last indefinitely if actively used, but we set a max age for security
 const SESSION_EXPIRY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
-// Idle timeout: If session hasn't been used in 7 days, consider it stale
 const SESSION_IDLE_TIMEOUT_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 function ensureDataDir() {
@@ -169,13 +166,11 @@ function isSessionExpired(session) {
   const now = Date.now();
   const age = now - createdAt;
 
-  // Check absolute expiry (30 days from creation)
   if (age > SESSION_EXPIRY_MS) {
     console.log(`[Sessions] Session expired by age: ${Math.floor(age / (24 * 60 * 60 * 1000))} days old`);
     return true;
   }
 
-  // Check idle timeout (7 days since last use)
   if (session.lastUsed) {
     const lastUsed = new Date(session.lastUsed).getTime();
     const idleTime = now - lastUsed;
@@ -243,7 +238,6 @@ function setSessionCookiesForAccount(
 
   const timestamp = new Date().toISOString();
   
-  // Preserve createdAt if session already exists (for session refresh)
   const existingSession = store.sessions[accountId];
   const createdAt = existingSession?.createdAt || timestamp;
   

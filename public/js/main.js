@@ -199,12 +199,10 @@ class SteamGuardApp {
     document.getElementById('securityPanel').innerHTML = '';
   }
 
-  // Update the showLoginForm method to show session age if expired
 
 async showLoginForm(account) {
   console.log(`[App] Showing login form for ${account.account_name}`);
   
-  // Try to get session info
   let sessionInfo = null;
   try {
     const response = await fetch(`/api/accounts/${account.id}/session-info`);
@@ -212,8 +210,7 @@ async showLoginForm(account) {
       sessionInfo = await response.json();
     }
   } catch (e) {
-    // Ignore error
-  }
+    console.error('[App] Failed to fetch session info:', e);}
 
   let sessionMessage = '';
   if (sessionInfo?.age) {
