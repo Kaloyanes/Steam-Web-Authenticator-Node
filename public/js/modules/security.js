@@ -1,252 +1,544 @@
-import { APIClient } from './api.js';
-
 export class SecurityPanel {
   constructor(ui) {
     this.ui = ui;
-    this.currentAccount = null;
+    this.root = null;
+    this.account = null;
+
+    this.state = {
+      loading: false,
+      error: null,
+      devices: [],
+      filter: 'all',
+      removingAll: false,
+      removingId: null
+    };
   }
 
-  render(container, account) {
-    container.innerHTML = `
-      <div class="collapsible-panel expanded">
+  render(rootElement, account) {
+    this.root = rootElement;
+    this.account = account;
+
+    if (!this.root) return;
+
+    this.root.innerHTML = `
+      <div class="collapsible-panel expanded security-panel">
         <div class="panel-header">
           <div class="panel-header-title">
             <span>🛡️</span>
-            <span>Security & Settings</span>
+            <span>Security & Devices</span>
           </div>
+          <div class="panel-header-meta" id="securitySummary"></div>
+          <div class="panel-toggle">▼</div>
         </div>
+
         <div class="panel-content">
-          <div id="securityContent"></div>
+          <div class="security-status-bar" id="securityStatusBar">
+            Loading devices...
+          </div>
+
+          <div class="security-filters">
+            <button class="security-filter-btn security-filter-btn--active" data-filter="all">
+              All devices
+            </button>
+            <button class="security-filter-btn" data-filter="active">
+              Active now
+            </button>
+            <button class="security-filter-btn" data-filter="recent">
+              Recently seen
+            </button>
+          </div>
+
+          <div class="security-devices-header">
+            <div class="security-devices-header-left">
+              <div class="security-devices-title">Signed-in devices</div>
+              <div class="security-devices-subtitle" id="securityDevicesSubtitle">
+                Loading...
+              </div>
+            </div>
+            <div class="security-devices-header-right">
+              <button class="security-signout-all-btn" id="securitySignOutAllBtn">
+                Sign out everywhere
+              </button>
+            </div>
+          </div>
+
+          <div class="security-devices-list" id="securityDevicesList">
+            <!-- devices go here -->
+          </div>
         </div>
       </div>
     `;
+
+    const header = this.root.querySelector('.panel-header');
+    header.addEventListener('click', () => {
+      const panel = this.root.querySelector('.collapsible-panel');
+      panel.classList.toggle('collapsed');
+      panel.classList.toggle('expanded');
+    });
+
+    this._bindFilterControls();
+    this._bindSignOutAll();
+
   }
 
   async loadWithRetry(account) {
+    const target = account || this.account;
+    if (!target) throw new Error('No account provided to SecurityPanel');
+
     try {
-      await this.load(account);
-    } catch (error) {
-      if (error.message === 'LOGIN_REQUIRED' || error.status === 401) {
-        throw new Error('LOGIN_REQUIRED');
+      await this._loadDevices(target);
+    } catch (err) {
+      if (err.message === 'LOGIN_REQUIRED') {
+        throw err;
       }
-      throw error;
+      this._setError(err.message || 'Failed to load devices');
     }
   }
 
-  async load(account) {
-    this.currentAccount = account;
-    const container = document.getElementById('securityContent');
+  async _loadDevices(account) {
+    if (!this.root) return;
 
-    container.innerHTML = '<div class="loading-state"><div class="spinner"></div> Loading security info...</div>';
+    const steamid = account.steamid;
+    if (!steamid) {
+      throw new Error('Missing steamid for account');
+    }
+
+    this.state.loading = true;
+    this._updateStatusBar('Loading devices...', 'info');
+    this._updateSubtitle('Fetching latest device activity...');
 
     try {
-      const status = await APIClient.getSecurityStatus(account.id);
-      const devices = await APIClient.getDevices(account.steamid);
+      const res = await fetch(`/api/security/${encodeURIComponent(steamid)}/devices`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      });
 
-      let html = `
-        <div style="background: var(--bg-tertiary); border: 1px solid var(--border-primary); border-radius: 8px; padding: 15px; margin-bottom: 20px;">
-          <h5 style="margin: 0 0 10px 0; font-size: 0.9rem; color: var(--text-secondary);">Account Information</h5>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-            <div>
-              <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 3px;">📛 Account Name</div>
-              <div style="font-weight: 600; color: var(--text-primary);">${account.account_name}</div>
-            </div>
-            <div>
-              <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 3px;">🔢 Steam ID</div>
-              <div style="font-weight: 600; color: var(--text-primary); font-size: 0.9rem; word-break: break-all;">${account.steamid}</div>
-            </div>
-          </div>
-        </div>
+      const data = await res.json().catch(() => ({}));
 
-        <h5 style="margin: 0 0 12px 0; font-size: 0.9rem; color: var(--text-secondary);">Security Status</h5>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;">
-          <div style="padding: 12px; background: var(--bg-tertiary); border: 1px solid var(--border-primary); border-radius: 6px;">
-            <div style="font-size: 0.75rem; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 6px; letter-spacing: 0.05em;">🔐 Authenticator</div>
-            <div style="font-weight: 700; font-size: 1.1rem; color: ${status.authenticatorEnabled ? 'var(--color-success)' : 'var(--color-error)'};">
-              ${status.authenticatorEnabled ? '✓ Enabled' : '✗ Disabled'}
-            </div>
-          </div>
-
-          <div style="padding: 12px; background: var(--bg-tertiary); border: 1px solid var(--border-primary); border-radius: 6px;">
-            <div style="font-size: 0.75rem; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 6px; letter-spacing: 0.05em;">📱 Phone</div>
-            <div>
-              <div style="font-weight: 700; font-size: 1.1rem; color: ${status.phoneNumber ? 'var(--color-success)' : 'var(--color-error)'};">
-                ${status.phoneNumber ? '✓ Verified' : '✗ Not Set'}
-              </div>
-              ${status.phoneNumberValue ? `<div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 4px;">${status.phoneNumberValue}</div>` : ''}
-            </div>
-          </div>
-
-          <div style="padding: 12px; background: var(--bg-tertiary); border: 1px solid var(--border-primary); border-radius: 6px;">
-            <div style="font-size: 0.75rem; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 6px; letter-spacing: 0.05em;">💾 Recovery</div>
-            <div style="font-weight: 700; font-size: 1.1rem; color: ${status.revocationCodeAvailable ? 'var(--color-success)' : 'var(--color-warning)'};">
-              ${status.revocationCodeAvailable ? '✓ Available' : '⚠ Missing'}
-            </div>
-          </div>
-
-          <div style="padding: 12px; background: var(--bg-tertiary); border: 1px solid var(--border-primary); border-radius: 6px;">
-            <div style="font-size: 0.75rem; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 6px; letter-spacing: 0.05em;">💱 Trading</div>
-            <div style="font-weight: 700; font-size: 1.1rem; color: ${status.tradingEnabled ? 'var(--color-success)' : 'var(--color-warning)'};">
-              ${status.tradingEnabled ? '✓ Enabled' : '⚠ Disabled'}
-            </div>
-          </div>
-        </div>
-
-        <h5 style="margin: 0 0 12px 0; font-size: 0.9rem; color: var(--text-secondary);">🔗 Authorized Devices (${devices.length})</h5>
-        <div id="devicesContainer" style="display: grid; gap: 12px;">
-      `;
-
-      if (devices.length > 0) {
-        devices.forEach(device => {
-          const icon = this.getDeviceIcon(device.type);
-
-          html += `
-            <div style="padding: 15px; background: var(--bg-tertiary); border: 1px solid var(--border-primary); border-radius: 6px; display: grid; grid-template-columns: 40px 1fr auto; gap: 12px; align-items: start;">
-              <div style="font-size: 2rem; text-align: center;">${icon}</div>
-              <div>
-                <div style="font-weight: 700; color: var(--text-primary); margin-bottom: 6px; word-break: break-word;">${device.name}</div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.85rem; color: var(--text-secondary);">
-                  <div>
-                    <div style="margin-bottom: 2px;">📍 Location</div>
-                    <div style="color: var(--text-primary);">${device.location}</div>
-                  </div>
-                  <div>
-                    <div style="margin-bottom: 2px;">⏱ Last Used</div>
-                    <div style="color: var(--text-primary);">${device.lastUsed}</div>
-                  </div>
-                </div>
-              </div>
-              <div>
-                <button class="device-remove-btn" data-device-id="${device.id}" style="padding: 8px 12px; background: var(--color-error); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem; white-space: nowrap;">
-                  Remove
-                </button>
-              </div>
-            </div>
-          `;
-        });
-      } else {
-        html += `
-          <div style="padding: 20px; background: linear-gradient(135deg, var(--bg-accent) 0%, var(--bg-secondary) 100%); border: 1px solid var(--border-primary); border-radius: 6px; text-align: center; color: var(--text-secondary);">
-            No authorized devices found
-          </div>
-        `;
+      if (!res.ok) {
+        if (res.status === 401 && data.error === 'LOGIN_REQUIRED') {
+          throw new Error('LOGIN_REQUIRED');
+        }
+        throw new Error(data.error || `HTTP ${res.status}`);
       }
 
-      html += `
+      const devices = Array.isArray(data.devices) ? data.devices : [];
+      this.state.devices = devices;
+      this.state.error = null;
+
+      this._renderDevices();
+      this._updateSummary();
+    } finally {
+      this.state.loading = false;
+    }
+  }
+
+  _bindFilterControls() {
+    const buttons = this.root.querySelectorAll('.security-filter-btn');
+    buttons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const filter = btn.dataset.filter || 'all';
+        this.state.filter = filter;
+
+        buttons.forEach(b => b.classList.remove('security-filter-btn--active'));
+        btn.classList.add('security-filter-btn--active');
+
+        this._renderDevices();
+      });
+    });
+  }
+
+  _bindSignOutAll() {
+    const btn = this.root.querySelector('#securitySignOutAllBtn');
+    if (!btn) return;
+
+    btn.addEventListener('click', async e => {
+      e.stopPropagation();
+      if (this.state.removingAll || !this.account) return;
+
+      const confirmed = window.confirm(
+        'Sign out of Steam on all devices?\n\nYou will need to log in again on all devices.'
+      );
+      if (!confirmed) return;
+
+      try {
+        this.state.removingAll = true;
+        btn.disabled = true;
+        btn.textContent = 'Signing out...';
+
+        await this._removeAllDevices(this.account);
+
+        this.ui && this.ui.showSuccess('Signed out from all devices');
+        await this._loadDevices(this.account);
+      } catch (err) {
+        if (err.message === 'LOGIN_REQUIRED') {
+          throw err;
+        }
+        this.ui && this.ui.showError('Failed to sign out everywhere: ' + err.message);
+      } finally {
+        this.state.removingAll = false;
+        btn.disabled = false;
+        btn.textContent = 'Sign out everywhere';
+      }
+    });
+  }
+
+  async _removeAllDevices(account) {
+    const steamid = account.steamid;
+    const res = await fetch(`/api/security/${encodeURIComponent(steamid)}/devices/all`, {
+      method: 'DELETE',
+      headers: { 'Accept': 'application/json' }
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      if (res.status === 401 && data.error === 'LOGIN_REQUIRED') {
+        throw new Error('LOGIN_REQUIRED');
+      }
+      throw new Error(data.error || `HTTP ${res.status}`);
+    }
+
+    return data;
+  }
+
+  async _removeSingleDevice(deviceId) {
+    if (!this.account || !deviceId) return;
+
+    const steamid = this.account.steamid;
+    const res = await fetch(
+      `/api/security/${encodeURIComponent(steamid)}/devices/${encodeURIComponent(deviceId)}`,
+      {
+        method: 'DELETE',
+        headers: { 'Accept': 'application/json' }
+      }
+    );
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      if (res.status === 401 && data.error === 'LOGIN_REQUIRED') {
+        throw new Error('LOGIN_REQUIRED');
+      }
+      throw new Error(data.error || `HTTP ${res.status}`);
+    }
+
+    return data;
+  }
+
+    _renderDevices() {
+    if (!this.root) return;
+    const list = this.root.querySelector('#securityDevicesList');
+    if (!list) return;
+
+    const devices = this.state.devices || [];
+    const filter = this.state.filter;
+
+    if (!devices.length) {
+      list.innerHTML = `
+        <div class="security-empty-state">
+          <div class="security-empty-title">No devices found</div>
+          <div class="security-empty-subtitle">
+            Once you sign in to Steam on a device, it will show up here.
+          </div>
         </div>
-        <div style="margin-top: 15px; display: flex; gap: 10px;">
+      `;
+      this._updateSubtitle('No active devices');
+      this._updateStatusBar('You are not signed in on any devices.', 'info');
+      return;
+    }
+
+    const now = Date.now();
+
+    const enriched = devices.map(raw => {
+  const lastSeenSeconds =
+    raw.lastActiveTime ??
+    raw.lastSeenTime ??
+    (raw.last_seen && (raw.last_seen.time || raw.last_seen.timestamp)) ??
+    null;
+
+  const lastSeenDate = lastSeenSeconds ? new Date(lastSeenSeconds * 1000) : null;
+
+  const deviceId = raw.id || raw.token_id || raw.deviceId;
+  const description = raw.name || raw.token_description || 'Unnamed device';
+
+  const loggedIn =
+    raw.loggedIn ??
+    raw.logged_in ??
+    (raw.raw && (raw.raw.logged_in ?? raw.raw.loggedIn)) ??
+    raw.isCurrentDevice ??
+    false;
+
+  const activeNow = this._isActiveNow(loggedIn, lastSeenDate, now);
+
+  const location =
+    raw.location ||
+    this._formatLocation({
+      city: raw.last_seen && raw.last_seen.city,
+      state: raw.last_seen && raw.last_seen.state,
+      country: raw.last_seen && raw.last_seen.country
+    });
+
+  return {
+    raw,
+    id: deviceId,
+    description,
+    lastSeenDate,
+    location,
+    activeNow
+  };
+});
+
+
+    let filtered = enriched;
+    if (filter === 'active') {
+      filtered = enriched.filter(d => d.activeNow);
+    } else if (filter === 'recent') {
+      filtered = enriched.filter(d => !d.activeNow && d.lastSeenDate);
+    }
+    if (!filtered.length) {
+      let title = 'No devices found';
+      let subtitle = 'There are no devices matching this filter right now.';
+
+      if (filter === 'active') {
+        title = 'No active devices';
+        subtitle = 'You are not currently active on any devices.';
+      } else if (filter === 'recent') {
+        title = 'No recently seen devices';
+        subtitle = 'No recent activity has been recorded for your devices.';
+      }
+
+      list.innerHTML = `
+        <div class="security-empty-state">
+          <div class="security-empty-title">${this._escape(title)}</div>
+          <div class="security-empty-subtitle">
+            ${this._escape(subtitle)}
+          </div>
+        </div>
+      `;
+
+      this._updateSubtitle('No devices in this view');
+      this._updateStatusBar(title, 'info');
+      return;
+    }
+
+    filtered.sort((a, b) => {
+      if (a.activeNow && !b.activeNow) return -1;
+      if (!a.activeNow && b.activeNow) return 1;
+      if (!a.lastSeenDate || !b.lastSeenDate) return 0;
+      return b.lastSeenDate.getTime() - a.lastSeenDate.getTime();
+    });
+
+    list.innerHTML = '';
+
+    filtered.forEach(device => {
+      const card = document.createElement('div');
+      card.className = 'security-device-card';
+
+      const badgeText = device.activeNow ? 'Active now' : 'Recently seen';
+      const badgeClass = device.activeNow
+        ? 'security-device-badge--active'
+        : 'security-device-badge--recent';
+
+      const lastSeenText = device.lastSeenDate
+        ? this._formatRelativeTime(device.lastSeenDate)
+        : 'No activity data';
+
+      const location = device.location;
+
+      card.innerHTML = `
+        <div class="security-device-main">
+          <div class="security-device-icon">
+            <div class="security-device-icon-inner">
+              💻
+            </div>
+          </div>
+          <div class="security-device-info">
+            <div class="security-device-title-row">
+              <div class="security-device-name">${this._escape(device.description)}</div>
+              <div class="security-device-badge ${badgeClass}">
+                ${badgeText}
+              </div>
+            </div>
+            <div class="security-device-meta">
+              <span>${lastSeenText}</span>
+              ${location ? `<span>• ${this._escape(location)}</span>` : ''}
+            </div>
+          </div>
+        </div>
+        <div class="security-device-actions">
           <button 
-            id="refreshSecurityBtn" 
-            class="secondary" 
-            style="flex: 1; padding: 10px;"
+            class="security-device-remove-btn" 
+            data-device-id="${device.id || ''}"
           >
-            🔄 Refresh
-          </button>
-          <button 
-            id="removeAllDevicesBtn" 
-            class="secondary" 
-            style="flex: 1; padding: 10px; background: var(--color-warning); color: white;"
-          >
-            🗑️ Remove All Devices
+            Sign out
           </button>
         </div>
       `;
 
-      container.innerHTML = html;
-
-      document.getElementById('refreshSecurityBtn').addEventListener('click', () => {
-        this.loadWithRetry(this.currentAccount);
-      });
-
-      document.getElementById('removeAllDevicesBtn').addEventListener('click', () => {
-        this.showRemoveAllConfirmation();
-      });
-
-      document.querySelectorAll('.device-remove-btn').forEach(btn => {
-        btn.addEventListener('click', e => {
-          const deviceId = e.target.getAttribute('data-device-id');
-          const deviceDiv = e.target.closest('[style*="grid-template-columns"]');
-          const deviceName = deviceDiv.querySelector('div:nth-child(2) > div:first-child').textContent;
-          this.showRemoveDeviceConfirmation(deviceId, deviceName);
+      const removeBtn = card.querySelector('.security-device-remove-btn');
+      if (removeBtn && device.id) {
+        removeBtn.addEventListener('click', async e => {
+          e.stopPropagation();
+          await this._handleRemoveSingle(device);
         });
-      });
-    } catch (error) {
-      if (error.message === 'LOGIN_REQUIRED' || error.status === 401) {
-        container.innerHTML = `
-          <div style="padding: 20px; background: #371f1f; border: 1px solid #7f1d1d; border-radius: 6px; text-align: center;">
-            <div style="color: var(--color-error); margin-bottom: 8px;">⚠️ Session Expired</div>
-            <div style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 10px;">
-              Your session has expired. Please refresh the account to login again.
-            </div>
-          </div>
-        `;
-        throw new Error('LOGIN_REQUIRED');
+      } else if (removeBtn) {
+        removeBtn.disabled = true;
       }
 
-      container.innerHTML = `
-        <div style="padding: 20px; background: #371f1f; border: 1px solid #7f1d1d; border-radius: 6px; text-align: center;">
-          <div style="color: var(--color-error); margin-bottom: 8px;">⚠️ Error Loading Security Info</div>
-          <div style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 10px;">${error.message}</div>
-          <button class="secondary" onclick="window.app.selectAccount(window.app.selectedAccount)" style="width: 100%;">
-            Retry
-          </button>
-        </div>
-      `;
+      list.appendChild(card);
+    });
+
+    const total = devices.length;
+    const activeCount = enriched.filter(d => d.activeNow).length;
+
+    this._updateSubtitle(`${activeCount} active, ${total} total devices`);
+    this._updateStatusBar(
+      activeCount === 0 ? 'No active devices.' : `${activeCount} device(s) active now.`,
+      'info'
+    );
+  }
+
+
+  async _handleRemoveSingle(device) {
+  const deviceId = device.id;
+  if (!deviceId) return;
+
+  const confirmed = window.confirm(
+    `Sign out of Steam on "${device.description}"?\n\nYou may need to sign in again on that device.`
+  );
+  if (!confirmed) return;
+
+  try {
+    this.state.removingId = deviceId;
+    await this._removeSingleDevice(deviceId);
+
+    this.ui && this.ui.showSuccess('Device signed out successfully');
+
+    await this._loadDevices(this.account);
+  } catch (err) {
+    if (err.message === 'LOGIN_REQUIRED') {
+      throw err;
+    }
+
+    if (err.message === 'DEVICE_REVOKE_UNSUPPORTED') {
+      this.ui && this.ui.showError(
+        'Steam no longer supports signing out a single device via this method. Use "Sign out everywhere" instead.'
+      );
+      return;
+    }
+
+    this.ui && this.ui.showError('Failed to sign out device: ' + err.message);
+  } finally {
+    this.state.removingId = null;
+  }
+}
+
+
+
+  _isActiveNow(loggedIn, lastSeenDate, nowMs) {
+    if (loggedIn === true || loggedIn === 1) return true;
+    if (!lastSeenDate) return false;
+
+    const diffMs = nowMs - lastSeenDate.getTime();
+    const minutes = diffMs / 60000;
+    return minutes <= 5;
+  }
+
+  _formatRelativeTime(date) {
+    const diffMs = Date.now() - date.getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+
+    if (diffSec < 60) return 'Just now';
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin === 1) return '1 minute ago';
+    if (diffMin < 60) return `${diffMin} minutes ago`;
+    const diffHours = Math.floor(diffMin / 60);
+    if (diffHours === 1) return '1 hour ago';
+    if (diffHours < 24) return `${diffHours} hours ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 1) return 'Yesterday';
+    return `${diffDays} days ago`;
+  }
+
+  _formatLocation(loc = {}) {
+    const parts = [];
+    if (loc.city) parts.push(loc.city);
+    if (loc.state) parts.push(loc.state);
+    if (loc.country) parts.push(loc.country);
+    return parts.join(', ');
+  }
+
+    _updateSummary() {
+  if (!this.root) return;
+  const el = this.root.querySelector('#securitySummary');
+  if (!el) return;
+
+  const devices = this.state.devices || [];
+  const now = Date.now();
+
+  const activeCount = devices.filter(d => {
+    const lastSeenSeconds =
+      d.lastActiveTime ??
+      d.lastSeenTime ??
+      (d.last_seen && (d.last_seen.time || d.last_seen.timestamp)) ??
+      null;
+    const lastSeenDate = lastSeenSeconds ? new Date(lastSeenSeconds * 1000) : null;
+
+    const loggedIn =
+      d.loggedIn ??
+      d.logged_in ??
+      (d.raw && (d.raw.logged_in ?? d.raw.loggedIn)) ??
+      d.isCurrentDevice ??
+      false;
+
+    return this._isActiveNow(loggedIn, lastSeenDate, now);
+  }).length;
+
+  el.textContent =
+    devices.length === 0
+      ? 'No devices'
+      : `${activeCount} active • ${devices.length} total`;
+}
+
+
+
+  _updateStatusBar(text, type = 'info') {
+    if (!this.root) return;
+    const bar = this.root.querySelector('#securityStatusBar');
+    if (!bar) return;
+
+    bar.textContent = text || '';
+    bar.className = 'security-status-bar';
+
+    if (type === 'error') {
+      bar.classList.add('security-status-bar--error');
+    } else if (type === 'success') {
+      bar.classList.add('security-status-bar--success');
+    } else {
+      bar.classList.add('security-status-bar--info');
     }
   }
 
-  getDeviceIcon(type) {
-    switch (type) {
-      case 'mobile':
-        return '📱';
-      case 'web':
-        return '🌐';
-      case 'desktop':
-        return '🖥️';
-      default:
-        return '🔗';
-    }
+  _updateSubtitle(text) {
+    if (!this.root) return;
+    const el = this.root.querySelector('#securityDevicesSubtitle');
+    if (!el) return;
+    el.textContent = text || '';
   }
 
-  showRemoveDeviceConfirmation(deviceId, deviceName) {
-    const message = `Are you sure you want to remove "${deviceName}"?`;
-    if (confirm(message)) {
-      this.removeDevice(deviceId, deviceName);
-    }
+  _setError(message) {
+    this.state.error = message;
+    this._updateStatusBar(message, 'error');
   }
 
-  showRemoveAllConfirmation() {
-    const message = `Are you sure you want to remove ALL authorized devices? This will sign you out of all devices.`;
-    if (confirm(message)) {
-      this.removeAllDevices();
-    }
-  }
-
-  async removeDevice(deviceId, deviceName) {
-    try {
-      await APIClient.removeDevice(this.currentAccount.steamid, deviceId);
-      this.ui.showSuccess(`Device "${deviceName}" removed successfully`);
-      this.loadWithRetry(this.currentAccount);
-    } catch (error) {
-      if (error.message === 'LOGIN_REQUIRED' || error.status === 401) {
-        this.ui.showError('Session expired. Please refresh the account.');
-        throw new Error('LOGIN_REQUIRED');
-      }
-      this.ui.showError(`Failed to remove device: ${error.message}`);
-    }
-  }
-
-  async removeAllDevices() {
-    try {
-      const response = await APIClient.removeAllDevices(this.currentAccount.steamid);
-      this.ui.showSuccess(`Removed ${response.removed} device${response.removed !== 1 ? 's' : ''}`);
-      this.loadWithRetry(this.currentAccount);
-    } catch (error) {
-      if (error.message === 'LOGIN_REQUIRED' || error.status === 401) {
-        this.ui.showError('Session expired. Please refresh the account.');
-        throw new Error('LOGIN_REQUIRED');
-      }
-      this.ui.showError(`Failed to remove devices: ${error.message}`);
-    }
+  _escape(str) {
+    if (str == null) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
   }
 }

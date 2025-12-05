@@ -28,7 +28,8 @@ const {
   removeAllDevices,
   removeAuthenticator,
   getSecurityStatus,
-  getBackupCodes
+  getBackupCodes,
+  signOutEverywhere
 } = require('./accountManagement');
 
 const app = express();
@@ -325,6 +326,35 @@ app.get('/api/accounts/:id/security-status', (req, res) => {
   }
 });
 
+app.post('/api/security/:steamid/devices/signout-everywhere', async (req, res) => {
+  try {
+    const steamid = req.params.steamid;
+    const account = loadAccounts().find(a => a.steamid === steamid);
+    if (!account) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+
+    console.log('[API] Signing out everywhere for', steamid);
+
+    const result = await signOutEverywhere(account);
+
+    if (!result.ok) {
+      return res.status(409).json({
+        error: 'steam_signout_everywhere_failed',
+        details: result
+      });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[API] signout-everywhere error', err);
+    if (err.message === 'LOGIN_REQUIRED' || err.code === 'LOGIN_REQUIRED') {
+      return res.status(401).json({ error: 'LOGIN_REQUIRED' });
+    }
+    res.status(500).json({ error: 'internal_error' });
+  }
+});
+
 app.get('/api/accounts/:id/devices', async (req, res) => {
   const account = loadAccounts().find(a => a.id === req.params.id);
   if (!account) return res.status(404).json({ error: 'Account not found' });
@@ -400,12 +430,19 @@ app.delete('/api/security/:steamid/devices/:deviceId', async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error('[API] Error removing device:', err.message, err.stack);
-    if (err.message === 'LOGIN_REQUIRED') {
+
+    if (err.message === 'LOGIN_REQUIRED' || err.code === 'LOGIN_REQUIRED') {
       return res.status(401).json({ error: 'LOGIN_REQUIRED' });
     }
+
+    if (err.code === 'DEVICE_REVOKE_UNSUPPORTED') {
+      return res.status(409).json({ error: 'DEVICE_REVOKE_UNSUPPORTED' });
+    }
+
     res.status(500).json({ error: err.message });
   }
 });
+
 
 app.delete('/api/security/:steamid/devices/all', async (req, res) => {
   try {

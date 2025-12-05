@@ -1,127 +1,372 @@
-.security-tabs {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 15px;
-  border-bottom: 1px solid var(--border-primary);
-  padding-bottom: 10px;
-}
-
-.security-tab {
-  padding: 8px 12px;
-  background: transparent;
-  border: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 0.9rem;
-  border-bottom: 2px solid transparent;
-  transition: all 0.2s;
-}
-
-.security-tab:hover {
-  color: var(--text-primary);
-}
-
-.security-tab.active {
-  color: var(--color-primary);
-  border-bottom-color: var(--color-primary);
-}
-
-.security-status-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 10px;
-  margin-bottom: 15px;
-}
-
-.status-item {
-  padding: 12px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-primary);
-  border-radius: 6px;
-  font-size: 0.85rem;
-}
-
-.status-item-icon {
-  font-size: 1.5rem;
-  margin-bottom: 6px;
-}
-
-.status-item-label {
-  color: var(--text-secondary);
-  font-size: 0.75rem;
-  margin-bottom: 4px;
-}
-
-.status-item-value {
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.status-item.enabled .status-item-value {
-  color: var(--color-success);
-}
-
-.status-item.disabled .status-item-value {
-  color: var(--color-error);
-}
-
-.device-list {
+.security-panel .panel-content {
   display: flex;
   flex-direction: column;
   gap: 10px;
-}
-
-.device-item {
-  padding: 12px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-primary);
-  border-radius: 6px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.device-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.device-name {
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 4px;
-}
-
-.device-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 12px;
-  font-size: 0.7rem;
+  padding: 12px 14px 14px;
   background: var(--bg-secondary);
+  border-radius: 0 0 8px 8px;
+  border-top: 1px solid var(--border-primary);
+  max-height: calc(100vh - 260px);
+  min-height: 0;
+}
+
+.security-status-bar {
+  font-size: 0.85rem;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.security-status-bar--info {
+  border-color: rgba(130, 170, 255, 0.5);
+}
+
+.security-status-bar--success {
+  border-color: rgba(46, 204, 113, 0.7);
+  background: linear-gradient(
+    135deg,
+    rgba(46, 204, 113, 0.12),
+    rgba(39, 174, 96, 0.08)
+  );
+  color: var(--text-primary);
+}
+
+.security-status-bar--error {
+  border-color: rgba(231, 76, 60, 0.8);
+  background: linear-gradient(
+    135deg,
+    rgba(231, 76, 60, 0.16),
+    rgba(192, 57, 43, 0.08)
+  );
+  color: var(--text-primary);
+}
+
+.security-panel .panel-header-meta {
+  margin-left: auto;
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+}
+
+.security-filters {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  margin-bottom: 4px;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+}
+
+.security-filter-btn {
+  border: none;
+  background: transparent;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s ease, color 0.12s ease, transform 0.05s ease;
+}
+
+.security-filter-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+}
+
+.security-filter-btn--active {
+  background: var(--color-primary);
+  color: #ffffff;
+  transform: translateY(-0.5px);
+}
+
+.security-devices-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
   margin-bottom: 6px;
 }
 
-.device-badge.mobile {
-  background: rgba(6, 182, 212, 0.2);
-  color: #06b6d4;
+.security-devices-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
-.device-badge.web {
-  background: rgba(139, 92, 246, 0.2);
-  color: #8b5cf6;
-}
-
-.device-badge.desktop {
-  background: rgba(236, 72, 153, 0.2);
-  color: #ec4899;
-}
-
-.device-meta {
+.security-devices-subtitle {
+  margin-top: 2px;
   font-size: 0.8rem;
   color: var(--text-secondary);
 }
 
-.device-remove-btn {
+.security-devices-header-right {
+  display: flex;
+  align-items: center;
+}
+
+.security-signout-all-btn {
+  border: 1px solid var(--color-primary);
+  background: linear-gradient(
+    135deg,
+    rgba(80, 140, 255, 0.15),
+    rgba(80, 140, 255, 0.05)
+  );
+  color: var(--color-primary);
+  border-radius: 999px;
   padding: 6px 12px;
-  font-size: 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease,
+    color 0.15s ease, transform 0.05s ease, box-shadow 0.15s ease;
+}
+
+.security-signout-all-btn:hover {
+  background: var(--color-primary);
+  color: #ffffff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4),
+    0 8px 18px rgba(80, 140, 255, 0.4);
+}
+
+.security-signout-all-btn:active {
+  transform: translateY(1px);
+  box-shadow: none;
+}
+
+.security-signout-all-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+  box-shadow: none;
+}
+
+.security-devices-list {
+  margin-top: 4px;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-right: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+}
+
+.security-devices-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.security-devices-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.security-devices-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 3px;
+}
+
+.security-empty-state {
+  padding: 16px 8px 12px;
+  border-radius: 6px;
+  border: 1px dashed var(--border-primary);
+  background: var(--bg-tertiary);
+  text-align: center;
+}
+
+.security-empty-title {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.security-empty-subtitle {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.security-device-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 11px;
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  border: 1px solid rgba(0, 0, 0, 0.7);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
+  transition: transform 0.08s ease, box-shadow 0.1s ease,
+    border-color 0.1s ease, background 0.1s ease;
+}
+
+.security-device-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.55);
+  border-color: rgba(110, 140, 255, 0.7);
+  background: radial-gradient(
+      circle at top left,
+      rgba(110, 140, 255, 0.18),
+      transparent 55%
+    ),
+    var(--bg-tertiary);
+}
+
+.security-device-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.security-device-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 30% 20%, #ffffff26, #00000033);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+  flex-shrink: 0;
+}
+
+.security-device-icon-inner {
+  font-size: 1.1rem;
+}
+
+.security-device-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.security-device-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.security-device-name {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.security-device-badge {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.security-device-badge--active {
+  border-color: rgba(46, 204, 113, 0.7);
+  background: rgba(39, 174, 96, 0.18);
+  color: #c8f7dc;
+}
+
+.security-device-badge--recent {
+  border-color: rgba(241, 196, 15, 0.7);
+  background: rgba(243, 156, 18, 0.18);
+  color: #fde3a7;
+}
+
+.security-device-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.security-device-meta span {
+  display: inline-flex;
+  align-items: center;
+}
+
+.security-device-meta span::before {
+  content: '';
+}
+
+.security-device-meta span + span::before {
+  content: '•';
+  margin: 0 4px 0 0;
+  opacity: 0.5;
+}
+
+.security-device-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.security-device-remove-btn {
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(231, 76, 60, 0.7);
+  background: linear-gradient(
+    135deg,
+    rgba(231, 76, 60, 0.12),
+    rgba(192, 57, 43, 0.08)
+  );
+  color: #ffd7d7;
+  font-size: 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s ease, border-color 0.12s ease,
+    transform 0.05s ease, box-shadow 0.12s ease;
+}
+
+.security-device-remove-btn:hover {
+  background: rgba(231, 76, 60, 0.9);
+  color: #ffffff;
+  box-shadow: 0 8px 16px rgba(231, 76, 60, 0.45);
+}
+
+.security-device-remove-btn:active {
+  transform: translateY(1px);
+  box-shadow: none;
+}
+
+.security-device-remove-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+  box-shadow: none;
+}
+
+@media (max-width: 900px) {
+  .security-panel .panel-content {
+    max-height: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .security-devices-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .security-device-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .security-device-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
 }

@@ -1,328 +1,409 @@
+const cheerio = require('cheerio');
 const axios = require('axios');
-const { getSessionCookiesForAccount, updateSessionLastUsed } = require('./storage');
+const FormData = require('form-data');
+let fetchFn = global.fetch;
+if (!fetchFn) {
+  fetchFn = (...args) =>
+    import('node-fetch').then(({ default: fetch }) => fetch(...args));
+}
+
+const {
+  getSessionCookiesForAccount,
+  updateSessionLastUsed
+} = require('./storage');
 const { getAgent } = require('./proxy');
 
-async function getDevicesFromSettings(account) {
-  const saved = getSessionCookiesForAccount(account.id);
+const AUTHORIZED_DEVICES_URL =
+  'https://store.steampowered.com/account/authorizeddevices';
+const REVOKE_DEVICE_URL =
+  'https://store.steampowered.com/twofactor/manage_action';
 
-  if (!saved?.sessionid || !saved?.steamLoginSecure) {
-    throw new Error('LOGIN_REQUIRED');
+function buildCookieHeader(session) {
+  const parts = [];
+
+  if (session.steamLoginSecure) {
+    parts.push(`steamLoginSecure=${session.steamLoginSecure}`);
+  }
+  if (session.sessionid || session.sessionId) {
+    parts.push(`sessionid=${session.sessionid || session.sessionId}`);
   }
 
-  console.log(`[Devices] Fetching devices for ${account.account_name}...`);
+  parts.push('Steam_Language=english');
+
+  return parts.join('; ');
+}
+
+async function fetchAuthorizedDevicesPage(session) {
+  const res = await fetchFn(AUTHORIZED_DEVICES_URL, {
+    method: 'GET',
+    headers: {
+      Cookie: buildCookieHeader(session),
+      'User-Agent':
+        session.userAgent ||
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.9'
+    }
+  });
+
+  if (res.status === 401 || res.status === 403) {
+    const err = new Error('LOGIN_REQUIRED');
+    err.code = 'LOGIN_REQUIRED';
+    throw err;
+  }
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(
+      `Failed to load authorized devices page (${res.status} ${res.statusText}) ${text.slice(
+        0,
+        200
+      )}`
+    );
+  }
+
+  return res.text();
+}
+
+function decodeJsonDataAttribute(raw) {
+  if (!raw) return null;
+
+  const unescaped = raw
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&#39;/g, "'");
 
   try {
-    const cookieStr = `sessionid=${saved.sessionid}; steamLoginSecure=${saved.steamLoginSecure}`;
-
-    const res = await axios.get('https://store.steampowered.com/account/authorizeddevices', {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Cookie': cookieStr,
-        'Referer': 'https://store.steampowered.com/account'
-      },
-      httpAgent: getAgent(),
-      httpsAgent: getAgent(),
-      validateStatus: () => true,
-      timeout: 15000
-    });
-
-    if (res.status === 401 || res.status === 403) {
-      throw new Error('LOGIN_REQUIRED');
-    }
-
-    if (res.status !== 200) {
-      console.log(`[Devices] Got status ${res.status}`);
-      return [];
-    }
-
-    console.log('[Devices] Parsing HTML for device data...');
-
-    const html = typeof res.data === 'string' ? res.data : '';
-    const activeDevicesMatch = html.match(/data-active_devices="(\[[\s\S]*?\])"/);
-
-    if (!activeDevicesMatch) {
-      console.log('[Devices] No active devices found in page, treating as expired session');
-      throw new Error('LOGIN_REQUIRED');
-    }
-
-    const escapedJson = activeDevicesMatch[1].replace(/&quot;/g, '"').replace(/\\\//g, '/');
-
-    let deviceList = [];
-    try {
-      deviceList = JSON.parse(escapedJson);
-      console.log(`[Devices] ✓ Found ${deviceList.length} REAL devices`);
-    } catch (e) {
-      console.error('[Devices] Failed to parse device JSON:', e.message);
-      return [];
-    }
-
-    updateSessionLastUsed(account.id);
-
-    return deviceList.map((dev) => {
-      const name = parseDeviceName(dev.token_description);
-      const location = dev.last_seen?.city || dev.last_seen?.country || 'Unknown Location';
-      const lastUsed = formatLastUsed(dev.last_seen?.time || dev.time_updated);
-
-      return {
-        id: String(dev.token_id),
-        name,
-        location,
-        lastUsed,
-        type: classifyDeviceType(name),
-        raw: dev
-      };
-    });
+    return JSON.parse(unescaped);
   } catch (err) {
-    console.error('[Devices] Error:', err.message);
-    if (err && err.message === 'LOGIN_REQUIRED') {
+    throw new Error(`Failed to parse JSON from data attribute: ${err.message}`);
+  }
+}
+
+function inferDeviceKind(device) {
+  const platformType = device.platform_type;
+  const desc = device.token_description || '';
+
+  if (platformType === 1) {
+    return {
+      kind: 'pc_client',
+      platformLabel: 'PC Steam Client',
+      icon: 'pc'
+    };
+  }
+
+  if (platformType === 3) {
+    if (/iphone|ios/i.test(desc)) {
+      return {
+        kind: 'mobile_ios',
+        platformLabel: 'Mobile device',
+        icon: 'mobile'
+      };
+    }
+
+    return {
+      kind: 'mobile_android',
+      platformLabel: 'Mobile device',
+      icon: 'mobile'
+    };
+  }
+
+  return {
+    kind: 'web',
+    platformLabel: 'Web browser',
+    icon: 'web'
+  };
+}
+
+function buildLocation(device) {
+  const lastSeen = device.last_seen || {};
+
+  const city = lastSeen.city || null;
+  const country = lastSeen.country || null;
+
+  if (city && country) return `${city}, ${country}`;
+  if (country) return country;
+  if (city) return city;
+  return null;
+}
+
+function toUnixSeconds(value) {
+  if (!value && value !== 0) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function normalizeDevice(device, category, requestingTokenId) {
+  const base = inferDeviceKind(device);
+
+  const lastSeenTime =
+    toUnixSeconds(device.last_seen && device.last_seen.time) ||
+    toUnixSeconds(device.time_updated);
+
+  const firstSeenTime =
+    toUnixSeconds(device.first_seen && device.first_seen.time) ||
+    toUnixSeconds(device.time_updated);
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const isNew =
+    firstSeenTime != null &&
+    nowSeconds - firstSeenTime < 14 * 24 * 60 * 60; // 14 days
+
+  const isCurrent =
+    requestingTokenId &&
+    String(requestingTokenId).replace(/"/g, '') ===
+      String(device.token_id).replace(/"/g, '');
+
+  return {
+    id: String(device.token_id),
+    name: device.token_description || base.platformLabel,
+    category,
+    kind: base.kind,
+    icon: base.icon,
+    platformLabel: base.platformLabel,
+    location: buildLocation(device),
+    lastActiveTime: lastSeenTime,
+    firstSeenTime,
+    isNew,
+    isCurrentDevice: !!isCurrent,
+    loggedIn: !!(device.logged_in || device.loggedIn),
+    raw: device
+  };
+}
+
+function getSteamSessionFromAccount(account) {
+  const saved = getSessionCookiesForAccount(account.id);
+
+  if (!saved) {
+    const err = new Error('LOGIN_REQUIRED');
+    err.code = 'LOGIN_REQUIRED';
+    throw err;
+  }
+
+  const cookies = saved.cookies || saved;
+
+  const steamLoginSecure =
+    cookies.steamLoginSecure ||
+    cookies.steamloginsecure ||
+    cookies['steamLoginSecure'];
+
+  const sessionid =
+    cookies.sessionid ||
+    cookies.sessionId ||
+    cookies['sessionid'];
+
+  if (!steamLoginSecure || !sessionid) {
+    const err = new Error('LOGIN_REQUIRED');
+    err.code = 'LOGIN_REQUIRED';
+    throw err;
+  }
+
+  return {
+    steamLoginSecure,
+    sessionid,
+    userAgent: saved.userAgent
+  };
+}
+
+async function getDevicesForAccount(session) {
+  const html = await fetchAuthorizedDevicesPage(session);
+  const $ = cheerio.load(html);
+
+  const appConfig = $('#application_config');
+  if (!appConfig.length) {
+    const err = new Error('LOGIN_REQUIRED');
+    err.code = 'LOGIN_REQUIRED';
+    throw err;
+  }
+
+  const activeAttr = appConfig.attr('data-active_devices');
+  const revokedAttr = appConfig.attr('data-revoked_devices');
+
+  if (!activeAttr && !revokedAttr) {
+    const err = new Error('LOGIN_REQUIRED');
+    err.code = 'LOGIN_REQUIRED';
+    throw err;
+  }
+
+  const activeRaw = decodeJsonDataAttribute(activeAttr);
+  const revokedRaw = decodeJsonDataAttribute(revokedAttr);
+  const requestingTokenId = decodeJsonDataAttribute(
+    appConfig.attr('data-requesting_token_id')
+  );
+
+  const activeDevices =
+    Array.isArray(activeRaw) ? activeRaw : activeRaw ? [activeRaw] : [];
+  const revokedDevices =
+    Array.isArray(revokedRaw) ? revokedRaw : revokedRaw ? [revokedRaw] : [];
+
+  const normalized = [];
+
+  for (const d of activeDevices) {
+    normalized.push(normalizeDevice(d, 'active', requestingTokenId));
+  }
+
+  for (const d of revokedDevices) {
+    normalized.push(normalizeDevice(d, 'recent', requestingTokenId));
+  }
+
+  return normalized;
+}
+
+async function getDevicesFromSettings(account) {
+  const session = getSteamSessionFromAccount(account);
+  const devices = await getDevicesForAccount(session);
+  updateSessionLastUsed(account.id);
+  return devices;
+}
+
+async function revokeSingleDevice(account, deviceId) {
+  const err = new Error('DEVICE_REVOKE_UNSUPPORTED');
+  err.code = 'DEVICE_REVOKE_UNSUPPORTED';
+  throw err;
+}
+
+async function signOutEverywhere(account) {
+  const saved = getSessionCookiesForAccount(account.id);
+  if (!saved?.sessionid || !saved?.steamLoginSecure) {
+    const err = new Error('LOGIN_REQUIRED');
+    err.code = 'LOGIN_REQUIRED';
+    throw err;
+  }
+
+  const cookieHeader = buildCookieHeader({
+    steamLoginSecure: saved.steamLoginSecure,
+    sessionid: saved.sessionid
+  });
+
+  const form = new FormData();
+  form.append('action', 'deauthorize');
+  form.append('sessionid', saved.sessionid);
+
+  const res = await axios.post(
+    'https://store.steampowered.com/twofactor/manage_action',
+    form,
+    {
+      headers: {
+        ...form.getHeaders(),
+        Cookie: cookieHeader,
+        Origin: 'https://store.steampowered.com',
+        Referer: AUTHORIZED_DEVICES_URL
+      },
+      maxRedirects: 0,
+      validateStatus: () => true
+    }
+  );
+
+  updateSessionLastUsed(account.id);
+
+  if (res.status === 302) {
+    const location = (res.headers && res.headers.location) || '';
+    if (location.includes('/login')) {
+      const err = new Error('LOGIN_REQUIRED');
+      err.code = 'LOGIN_REQUIRED';
       throw err;
     }
-    return [];
-  }
-}
-
-async function getAuthorizedDevices(account) {
-  return getDevicesFromSettings(account);
-}
-
-function parseDeviceName(description) {
-  if (!description) return 'Unknown Device';
-  if (description.includes('DESKTOP-') || description.match(/^[A-Z0-9\-]+$/)) {
-    return `Steam Desktop - ${description}`;
+    return { ok: true };
   }
 
-  if (description.includes('iPhone')) return 'iPhone';
-  if (description.includes('iPad')) return 'iPad';
-  if (description.includes('Android')) return 'Android Device';
-
-  if (description.includes('Chrome')) return 'Chrome';
-  if (description.includes('Firefox')) return 'Firefox';
-  if (description.includes('Safari')) return 'Safari';
-  if (description.includes('Edge')) return 'Microsoft Edge';
-  if (description.includes('Opera')) return 'Opera';
-
-  let os = '';
-  if (description.includes('Windows')) os = 'Windows';
-  if (description.includes('Mac OS X')) os = 'macOS';
-  if (description.includes('Linux')) os = 'Linux';
-  if (description.includes('iOS')) os = 'iOS';
-  if (description.includes('Android')) os = 'Android';
-
-  let browser = '';
-  if (description.includes('Chrome') && !description.includes('Chromium')) browser = 'Chrome';
-  if (description.includes('Firefox')) browser = 'Firefox';
-  if (description.includes('Safari') && !description.includes('Chrome')) browser = 'Safari';
-  if (description.includes('Edge')) browser = 'Edge';
-
-  if (browser && os) {
-    return `${browser} - ${os}`;
+  if (res.status === 200) {
+    return { ok: true };
   }
 
-  return description.substring(0, 60);
-}
+  console.warn('[Steam] signOutEverywhere failed', {
+    status: res.status,
+    location: res.headers && res.headers.location
+  });
 
-function formatLastUsed(timestamp) {
-  if (!timestamp) return 'Unknown';
-
-  const date = new Date(timestamp * 1000);
-  const now = new Date();
-  const diffMs = now - date;
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
-  if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
-  if (diffDays < 30) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
-
-  return date.toLocaleDateString();
-}
-
-function classifyDeviceType(name) {
-  const lower = (name || '').toLowerCase();
-
-  if (lower.includes('iphone') || lower.includes('ipad') || lower.includes('android')) {
-    return 'mobile';
-  }
-  if (lower.includes('chrome') || lower.includes('firefox') || lower.includes('safari') ||
-      lower.includes('edge') || lower.includes('opera')) {
-    return 'web';
-  }
-  if (lower.includes('desktop') || lower.includes('steam') || lower.includes('windows') ||
-      lower.includes('mac') || lower.includes('linux')) {
-    return 'desktop';
-  }
-
-  return 'unknown';
+  return { ok: false, status: res.status };
 }
 
 async function removeDevice(account, deviceId) {
-  try {
-    if (!deviceId) {
-      throw new Error('Device ID is required');
-    }
-
-    const saved = getSessionCookiesForAccount(account.id);
-    if (!saved?.sessionid || !saved?.steamLoginSecure) {
-      throw new Error('LOGIN_REQUIRED');
-    }
-
-    const cookieStr = `sessionid=${saved.sessionid}; steamLoginSecure=${saved.steamLoginSecure}`;
-
-    const params = new URLSearchParams();
-    params.set('token_id', String(deviceId));
-    params.set('sessionid', saved.sessionid);
-
-    console.log(`[Device] Removing device ${deviceId}...`);
-
-    const res = await axios.post(
-      'https://store.steampowered.com/account/ajaxrevokedevice',
-      params.toString(),
-      {
-        headers: {
-          'User-Agent': 'Mozilla/5.0',
-          'Cookie': cookieStr,
-          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-          'X-Requested-With': 'XMLHttpRequest'
-        },
-        httpAgent: getAgent(),
-        httpsAgent: getAgent(),
-        validateStatus: () => true,
-        timeout: 10000
-      }
-    );
-
-    console.log(`[Device] Remove response status: ${res.status}`);
-    console.log('[Device] Remove response data:', res.data);
-
-    updateSessionLastUsed(account.id);
-
-    if (res.status === 401 || res.status === 403) {
-      throw new Error('LOGIN_REQUIRED');
-    }
-
-    if (res.status !== 200) {
-      throw new Error(`HTTP ${res.status}: ${res.data?.message || 'Failed to remove device'}`);
-    }
-
-    if (res.data && typeof res.data === 'object' && res.data.success === false) {
-      throw new Error(res.data.message || 'Failed to remove device');
-    }
-
-    return { success: true, message: 'Device removed successfully' };
-  } catch (err) {
-    console.error('[Device] Error:', err.message, err.stack);
-    throw err;
+  if (deviceId === 'all') {
+    return removeAllDevices(account);
   }
+  return revokeSingleDevice(account, deviceId);
 }
 
+
 async function removeAllDevices(account) {
-  try {
-    const devices = await getDevicesFromSettings(account);
-    const results = [];
+  const result = await signOutEverywhere(account);
 
-    for (const device of devices) {
-      try {
-        await removeDevice(account, device.id);
-        results.push({ device: device.name, success: true });
-      } catch (err) {
-        results.push({ device: device.name, success: false, error: err.message });
-      }
-    }
-
+  if (!result.ok) {
     return {
-      success: results.filter(r => r.success).length === results.length,
-      results,
-      removed: results.filter(r => r.success).length,
-      failed: results.filter(r => !r.success).length
+      success: false,
+      results: [],
+      removed: 0,
+      failed: 0,
+      status: result.status
     };
-  } catch (err) {
-    console.error('[Device] Error:', err.message, err.stack);
+  }
+
+  const devices = await getDevicesFromSettings(account);
+
+  return {
+    success: true,
+    results: [],
+    removed: 0,
+    failed: 0,
+    devices
+  };
+}
+
+async function getSecurityStatus(account) {
+  const session = getSteamSessionFromAccount(account);
+  const html = await fetchAuthorizedDevicesPage(session);
+  const $ = cheerio.load(html);
+  const appConfig = $('#application_config');
+
+  if (!appConfig.length) {
+    const err = new Error('LOGIN_REQUIRED');
+    err.code = 'LOGIN_REQUIRED';
     throw err;
   }
+
+  const twoFactorStatus = decodeJsonDataAttribute(
+    appConfig.attr('data-two_factor_status')
+  );
+  const accountNameAttr = decodeJsonDataAttribute(
+    appConfig.attr('data-accountName')
+  );
+  const emailAttr = decodeJsonDataAttribute(appConfig.attr('data-email'));
+  const phoneHintAttr = decodeJsonDataAttribute(appConfig.attr('data-phone_hint'));
+
+  const twoFactorEnabled = !!(twoFactorStatus && twoFactorStatus.state === 1);
+
+  return {
+    accountName: accountNameAttr || account.account_name,
+    email: emailAttr || null,
+    phoneHint: phoneHintAttr || null,
+    twoFactor: {
+      enabled: twoFactorEnabled,
+      raw: twoFactorStatus || null
+    }
+  };
 }
 
 async function removeAuthenticator(account, revocationCode) {
-  try {
-    const SteamCommunity = require('steamcommunity');
-    const community = new SteamCommunity();
-    const saved = getSessionCookiesForAccount(account.id);
-    if (!saved?.sessionid || !saved?.steamLoginSecure) {
-      throw new Error('LOGIN_REQUIRED');
-    }
-
-    const cookieStr = `sessionid=${saved.sessionid}; steamLoginSecure=${saved.steamLoginSecure}`;
-    community.setCookies([cookieStr]);
-
-    return new Promise((resolve, reject) => {
-      community.disableTwoFactor(revocationCode, (err) => {
-        if (err) {
-          return reject(new Error(`Failed to remove authenticator: ${err.message}`));
-        }
-        resolve({
-          success: true,
-          message: 'Authenticator removed. WARNING: 7-day trade ban will be applied.',
-          tradeBanDays: 7
-        });
-      });
-    });
-  } catch (err) {
-    console.error('[2FA] Error:', err.message);
-    throw err;
-  }
-}
-
-function getSecurityStatus(account) {
-  try {
-    const saved = getSessionCookiesForAccount(account.id);
-    if (!saved) {
-      return { hasSession: false, sessionExpired: true };
-    }
-
-    const maFile = account.raw_mafile || {};
-
-    return {
-      hasSession: true,
-      sessionExpired: false,
-      authenticatorEnabled: !!maFile.shared_secret,
-      phoneNumber: !!(maFile.phone_number || maFile.phone || maFile.phone_verified || maFile.fully_enrolled),
-      phoneNumberValue: maFile.phone_number || maFile.phone || null,
-      lastLogin: saved.lastUsed || null,
-      revocationCodeAvailable: !!maFile.revocation_code,
-      tradingEnabled: !!maFile.fully_enrolled
-    };
-  } catch (err) {
-    console.error('[Security] Error:', err.message);
-    return { hasSession: false, error: err.message };
-  }
+  throw new Error(
+    'Removing the authenticator is not implemented in this build. Use the official Steam app / website for now.'
+  );
 }
 
 async function getBackupCodes(account) {
-  try {
-    const saved = getSessionCookiesForAccount(account.id);
-    if (!saved?.sessionid) throw new Error('LOGIN_REQUIRED');
-
-    updateSessionLastUsed(account.id);
-
-    return {
-      backupCodesGenerated: true,
-      backupCodesUsed: 0,
-      backupCodesRemaining: 10,
-      canGenerateNew: true
-    };
-  } catch (err) {
-    console.warn('[Backup] Error:', err.message);
-    return { backupCodesGenerated: false };
-  }
+  throw new Error(
+    'Fetching backup codes is not implemented in this build.'
+  );
 }
 
 module.exports = {
   getDevicesFromSettings,
-  getAuthorizedDevices,
   removeDevice,
   removeAllDevices,
   removeAuthenticator,
   getSecurityStatus,
-  getBackupCodes
+  getBackupCodes,
+
+  getDevicesForAccount,
+  signOutEverywhere
 };
